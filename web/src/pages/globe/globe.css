@@ -1,0 +1,131 @@
+/* The globe fills the content panel; its controls float over it on opaque cards. */
+.fm-globe {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #000;
+}
+.fm-globe-host {
+  position: absolute;
+  inset: 0;
+}
+.fm-globe-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+}
+.fm-globe-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.fm-globe-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 60%);
+  font-size: 11px;
+  white-space: nowrap;
+  direction: ltr;
+  will-change: transform;
+}
+.fm-globe-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: var(--lab-space-4);
+  background: color-mix(in srgb, var(--lab-ground) 70%, transparent);
+}
+.fm-globe-card {
+  width: min(100%, 26rem);
+  border-radius: var(--lab-radius-panel);
+  background: var(--lab-surface);
+  box-shadow: 0 0 0 1px var(--lab-line);
+}
+.fm-globe-card > .fm-log {
+  margin: 0 var(--lab-space-4) var(--lab-space-4);
+}
+.fm-globe-hint {
+  position: absolute;
+  top: calc(var(--lab-toolbar-item, 44px) + 3 * var(--lab-shell-gap, 8px));
+  inset-inline: 0;
+  z-index: 2;
+  justify-self: center;
+  width: fit-content;
+  margin-inline: auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--lab-surface);
+  box-shadow: 0 0 0 1px var(--lab-line);
+  font-size: 13px;
+  color: var(--lab-ink);
+  pointer-events: none;
+}
+.fm-globe-timeline {
+  position: absolute;
+  inset-inline: var(--lab-shell-gap, 8px);
+  bottom: calc(var(--lab-toolbar-item, 44px) + 4 * var(--lab-shell-gap, 8px) + 8px);
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  width: min(calc(100% - 2 * var(--lab-shell-gap, 8px)), 52rem);
+  margin-inline: auto;
+  padding: 10px 12px;
+  border-radius: var(--lab-radius-panel);
+  background: color-mix(in srgb, var(--lab-surface) 92%, transparent);
+  box-shadow: 0 0 0 1px var(--lab-line);
+}
+.fm-tl-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-shell-gap, 8px);
+  min-width: 0;
+}
+.fm-tl-clock {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--lab-ink);
+}
+.fm-tl-hist {
+  display: block;
+  width: 100%;
+  height: 34px;
+  cursor: pointer;
+  color: var(--lab-ink);
+}
+.fm-tl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+  font-size: 12px;
+}
+.fm-tl-legend > small {
+  margin-inline-start: auto;
+}
+@media (max-width: 560px) {
+  .fm-tl-legend > small {
+    display: none;
+  }
+}
+.fm-globe-boxnote {
+  position: absolute;
+  top: calc(var(--lab-toolbar-item, 44px) + 3 * var(--lab-shell-gap, 8px));
+  inset-inline-start: var(--lab-shell-gap, 8px);
+  z-index: 2;
+  max-width: 22rem;
+  font-size: 12px;
+}
+.fm-subhead {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lab-ink);
+}

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.env.*
+**/.DS_Store
+**/target
+**/node_modules
+**/__pycache__
+web/dist
+data/raw
+data/cache
+data/harm_data.js
+reference
+docs

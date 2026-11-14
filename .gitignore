@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+node_modules/
+web/dist/
+server/target/
+data/raw/
+.DS_Store
+.claude/

@@ -1,0 +1,1334 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FIRMS Satellite Simulator</title>
+<style>
+  :root { --glass: rgba(16,18,22,.80); --line: rgba(255,255,255,.09); --text: #e8e8e8; --muted: #9a9a9a; --soft: rgba(255,255,255,.06); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--text); font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; }
+  .panel { position: fixed; background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 5; }
+  .hidden { display: none !important; }
+  .rtl { direction: rtl; }
+  button, select { background: var(--soft); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 4px 9px; font: inherit; cursor: pointer; }
+  button:hover, select:hover { border-color: rgba(255,255,255,.25); }
+  button.on { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.3); }
+  .ph { display: flex; align-items: center; justify-content: space-between; font-weight: 600; margin: 0 0 8px; }
+  .x { background: none; border: none; color: var(--muted); font-size: 17px; padding: 0 4px; line-height: 1; }
+  h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 6px; }
+  .hint { color: var(--muted); font-size: 12px; }
+  #top { top: 12px; left: 12px; padding: 7px 9px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: calc(100vw - 340px); }
+  #clock { font-variant-numeric: tabular-nums; font-size: 15px; padding: 0 6px; direction: ltr; }
+  #ctrl { top: 12px; right: 12px; width: 300px; max-height: calc(100vh - 150px); overflow-y: auto; padding: 12px; }
+  #info, #help { top: 62px; left: 12px; width: 340px; max-height: calc(100vh - 200px); overflow-y: auto; padding: 12px; }
+  #tl { left: 50%; transform: translateX(-50%); bottom: 12px; width: min(920px, calc(100vw - 24px)); padding: 8px 12px 9px; }
+  #hist { width: 100%; height: 42px; display: block; cursor: pointer; }
+  #slider { width: 100%; margin: 3px 0 0; accent-color: #ddd; }
+  .tlrow { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--muted); }
+  .sys { display: flex; align-items: center; gap: 8px; margin: 12px 0 3px; font-weight: 600; }
+  .sat { display: flex; align-items: center; gap: 8px; padding: 3px 5px; border-radius: 6px; cursor: pointer; user-select: none; }
+  .sat:hover { background: var(--soft); }
+  .sat.off { opacity: .35; }
+  .sym { width: 16px; text-align: center; font-size: 13px; }
+  .cnt { margin-inline-start: auto; color: var(--muted); font-variant-numeric: tabular-nums; direction: ltr; }
+  label.chk { display: flex; gap: 6px; align-items: center; margin: 4px 0; cursor: pointer; }
+  .row { display: flex; gap: 6px; align-items: center; margin: 5px 0; flex-wrap: wrap; }
+  .legend { height: 8px; border-radius: 3px; margin: 6px 0 2px; }
+  .lg { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  table.rec { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.rec td { padding: 3px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.k, td.v { direction: ltr; text-align: left; font-family: ui-monospace, Menlo, monospace; }
+  td.k { color: var(--muted); width: 82px; }
+  td.v { white-space: nowrap; }
+  .card { background: var(--soft); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin: 7px 0; }
+  .lbl { position: fixed; pointer-events: none; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: rgba(0,0,0,.6); transform: translate(12px,-50%); white-space: nowrap; z-index: 3; direction: ltr; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; font-size: 15px; z-index: 20; direction: rtl; }
+  ul { padding-inline-start: 18px; margin: 4px 0; } li { margin: 4px 0; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; }
+  /* harmonization panel */
+  #harm { top: 62px; left: 12px; width: min(620px, calc(100vw - 340px)); max-height: calc(100vh - 175px); overflow-y: auto; padding: 12px; }
+  body.harm-open #info, body.harm-open #help { left: calc(min(620px, 100vw - 340px) + 24px); }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0 10px; }
+  .tabs button.on { background: rgba(255,255,255,.18); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; }
+  .kpi { background: var(--soft); border: 1px solid var(--line); border-radius: 9px; padding: 6px 9px; }
+  .kpi .k { font-size: 11px; color: var(--muted); } .kpi .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .s { font-size: 11px; color: var(--muted); }
+  input[type=number], input[type=text] { background: var(--soft); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px; font: inherit; width: 84px; direction: ltr; }
+  table.ht { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.ht th { color: var(--muted); font-weight: 600; text-align: start; padding: 4px; border-bottom: 1px solid rgba(255,255,255,.18); }
+  table.ht td { padding: 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  table.ht td.n, table.ht th.n { text-align: end; direction: ltr; }
+  table.ht td.best { background: rgba(12,163,12,.18); font-weight: 700; }
+  .hchart { position: relative; direction: ltr; }
+  .hchart svg { display: block; width: 100%; height: auto; }
+  .hchart text { fill: #9a9a9a; font: 10px system-ui, sans-serif; }
+  .htip { position: absolute; pointer-events: none; background: rgba(16,18,22,.95); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font-size: 11.5px; z-index: 9; min-width: 150px; direction: rtl; line-height: 1.5; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chips label { display: inline-flex; gap: 4px; align-items: center; font-size: 11.5px; background: var(--soft); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; cursor: pointer; }
+  .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .note { font-size: 12px; color: var(--muted); border-inline-start: 2px solid var(--line); padding-inline-start: 8px; margin: 6px 0; }
+  code.cmd { display: block; direction: ltr; text-align: left; background: rgba(0,0,0,.4); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<script src="data/fires.js"></script>
+<script src="data/harm_data.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="loading">جارٍ حساب مدارات الأقمار ومطابقتها مع السجلات…</div>
+<div id="view"></div>
+<div id="labels"></div>
+<svg width="0" height="0" style="position:absolute"><defs id="patdefs"></defs></svg>
+
+<!-- top bar -->
+<div id="top" class="panel rtl">
+  <b style="padding:0 4px">FIRMS</b>
+  <span id="clock">--</span>
+  <button id="play" title="تشغيل / إيقاف (Space)">▶</button>
+  <select id="speed" title="السرعة">
+    <option value="60">60×</option><option value="300">300×</option><option value="600" selected>600×</option>
+    <option value="1800">1800×</option><option value="3600">3600×</option>
+  </select>
+  <span style="width:6px"></span>
+  <button data-toggle="harm" class="on">التوحيد والتقويم</button>
+  <button data-toggle="ctrl" class="on">التحكم</button>
+  <button data-toggle="info">السجل</button>
+  <button data-toggle="tl" class="on">الزمن</button>
+  <button data-toggle="help">شرح</button>
+  <button id="hideAll" title="إخفاء / إظهار كل اللوحات (H)">إخفاء <kbd>H</kbd></button>
+</div>
+
+<!-- controls -->
+<div id="ctrl" class="panel rtl">
+  <div class="ph"><span>التحكم</span><button class="x" data-close="ctrl">×</button></div>
+  <div class="hint" id="genInfo"></div>
+  <div class="hint" id="validate"></div>
+  <div id="sats"></div>
+
+  <h3>تلوين البكسلات حسب</h3>
+  <select id="mode" style="width:100%">
+    <option value="0">النظام (MODIS / VIIRS / Landsat / ثابت)</option>
+    <option value="1">شدة الحريق (frp)</option>
+    <option value="2">نهار / ليل</option>
+    <option value="3">الثقة (confidence)</option>
+    <option value="4">تكبّر البكسل بسبب زاوية النظر</option>
+  </select>
+  <div id="legend"></div>
+
+  <h3>العرض</h3>
+  <div class="row">السجلات:
+    <select id="win">
+      <option value="1e9" selected>كل ما رُصد حتى الآن</option><option value="10800">آخر 3 ساعات</option>
+      <option value="3600">آخر ساعة</option><option value="900">آخر 15 دقيقة</option>
+    </select>
+  </div>
+  <div class="row">الأقمار الثابتة:
+    <select id="geowin">
+      <option value="900" selected>آخر صورة فقط (15 دقيقة)</option><option value="3600">آخر ساعة</option><option value="1e9">كل الصور</option>
+    </select>
+  </div>
+  <div class="row">الثقة الدنيا:
+    <select id="minconf"><option value="0" selected>الكل</option><option value="1">عادية وعالية</option><option value="2">عالية فقط</option></select>
+  </div>
+  <div class="row">صورة الأرض عند الاقتراب:
+    <select id="layer"><option value="sat" selected>صور أقمار</option><option value="osm">OpenStreetMap</option><option value="none">بدون</option></select>
+  </div>
+  <label class="chk"><input type="checkbox" id="optShade" checked> تظليل الليل</label>
+  <label class="chk"><input type="checkbox" id="optSwath" checked> شريط المسح / قرص الرؤية</label>
+  <label class="chk"><input type="checkbox" id="optFan" checked> زاوية الرؤية من القمر</label>
+  <label class="chk"><input type="checkbox" id="optTrack" checked> مسار القمر على الأرض</label>
+  <label class="chk"><input type="checkbox" id="optLabels" checked> أسماء الأقمار</label>
+  <div class="row">تتبّع الكاميرا: <select id="follow"><option value="-1">بدون</option></select></div>
+  <div class="row">
+    <button data-go="5,20">أفريقيا</button><button data-go="-10,-55">أ. الجنوبية</button><button data-go="40,-100">أ. الشمالية</button>
+    <button data-go="15,100">آسيا</button><button data-go="-25,135">أستراليا</button><button data-go="45,10">أوروبا</button>
+    <button data-go="0,0" data-dist="9">الأرض كاملة</button>
+  </div>
+</div>
+
+<!-- harmonization -->
+<div id="harm" class="panel rtl">
+  <div class="ph"><span>توحيد MODIS و VIIRS · تقويم الحرائق</span><button class="x" data-close="harm">×</button></div>
+  <div class="row">المنطقة:
+    <select id="hReg" style="flex:1"></select>
+    <button id="hDraw" title="انقر نقطتين على الكرة لتحديد زاويتي المستطيل">ارسم على الكرة</button>
+    <button id="hGo">اذهب إليها</button>
+  </div>
+  <div class="row" style="direction:ltr;justify-content:flex-end">
+    W <input type="number" id="hW" step="0.1"> S <input type="number" id="hS" step="0.1"> E <input type="number" id="hE" step="0.1"> N <input type="number" id="hN" step="0.1">
+    <button id="hApply">تطبيق</button>
+  </div>
+  <div class="row">الفترة: من <select id="hY0"></select><select id="hM0"></select> إلى <select id="hY1"></select><select id="hM1"></select></div>
+  <div class="row">الخوارزمية: <select id="hAlg" style="flex:1"></select></div>
+  <div class="hint" id="hAlgInfo"></div>
+  <div class="tabs" id="hTabs">
+    <button data-t="sum" class="on">الملخص</button><button data-t="cal">التقويم</button><button data-t="alg">مقارنة الخوارزميات</button>
+    <button data-t="live">على الكرة الآن</button><button data-t="dl">تنزيل</button><button data-t="how">الطريقة</button>
+  </div>
+  <div id="hBody"></div>
+</div>
+
+<!-- selected record -->
+<div id="info" class="panel rtl hidden">
+  <div class="ph"><span>السجل المختار</span><button class="x" data-close="info">×</button></div>
+  <div id="infoBody" class="hint">اضغط على أي بكسل على الكرة لترى سجله الحقيقي.</div>
+</div>
+
+<!-- help -->
+<div id="help" class="panel rtl hidden">
+  <div class="ph"><span>كيف تقرأ المحاكاة</span><button class="x" data-close="help">×</button></div>
+  <ul class="hint">
+    <li><b>اللون = النظام</b>، وأيضاً <b>نوع الحدود</b>:<br>
+      MODIS حدود متصلة، VIIRS حدود متقطعة، Landsat حدود منقّطة، الأقمار الثابتة شرطة ونقطة.</li>
+    <li><b>النقش داخل البكسل = القمر</b> داخل النظام (مصمت، خطوط مائلة، نقاط، شبكة، خطوط أفقية)، و<b>الرمز</b> (● ○ ◆ ■ …) يظهر بجانب اسم القمر وفي القائمة. النقوش والحدود تظهر عند الاقتراب.</li>
+    <li><b>كل مستطيل = سجل واحد = بكسل واحد</b> بحجمه واتجاهه الحقيقيين على سطح الكرة.
+      الأقمار القطبية: ضلع scan عمودي على المسار وضلع track موازٍ له. الأقمار الثابتة: البكسل يتمدد في اتجاه النظر كلما ابتعد عن نقطة تحت القمر.</li>
+    <li><b>ارتفاع كل قمر حقيقي</b> من مداره (TLE): VIIRS نحو 830 كم، MODIS وLandsat نحو 705 كم، الأقمار الثابتة 35,786 كم.
+      <b>عرض الشريط محسوب من زاوية المسح الحقيقية</b> والارتفاع: VIIRS ±56°، MODIS ±55°، Landsat ±7.5°.</li>
+    <li><b>الأقمار الثابتة</b> (GOES، Meteosat، Himawari) لا تتحرك؛ ترى نصف الكرة كاملاً كل 10–15 دقيقة، لذلك يتكرر الحريق نفسه عشرات المرات في اليوم. افتراضياً تظهر آخر صورة لها فقط، وتُرسم تحت بكسلات الأقمار القطبية الأدق.</li>
+    <li><b>الوميض</b> = لحظة الرصد. <b>الإطار الأبيض</b> بعد الاختيار = بكسلات نفس القمر في نفس اللقطة. <b>السهم الملوّن</b> = اتجاه حركة القمر (أو اتجاه النظر للثابت)، <b>الأبيض</b> = اتجاه المسح.</li>
+    <li>اختصارات: <kbd>H</kbd> إخفاء اللوحات، <kbd>Space</kbd> تشغيل/إيقاف.</li>
+  </ul>
+</div>
+
+<!-- timeline -->
+<div id="tl" class="panel">
+  <canvas id="hist"></canvas>
+  <input id="slider" type="range" step="10">
+  <div class="tlrow"><span>bars: detections per 15 min, by system · click to jump</span><span id="attr" class="rtl"></span></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const D = window.FIRMS_DATA;
+if (!D) { document.getElementById('loading').textContent = 'لم يتم العثور على data/fires.js — شغّل: python3 fetch_data.py'; throw new Error('no data'); }
+const SATS = D.sats, C = D.cols, N = C.lat.length, NS_SATS = SATS.length;
+const R_KM = 6371, DEG = Math.PI / 180, STEP = 10;
+const SYS = [
+  { name: 'MODIS',   col: '#e8a33d', border: 'حدود متصلة',  dash: '' },
+  { name: 'VIIRS',   col: '#4fb3d9', border: 'حدود متقطعة', dash: '4 3' },
+  { name: 'Landsat', col: '#8fd16a', border: 'حدود منقّطة', dash: '1.3 2.4' },
+  { name: 'أقمار ثابتة (Geo)', col: '#b58cf0', border: 'شرطة ونقطة', dash: '6 2 1.6 2' },
+];
+const PAT_AR = ['مصمت', 'خطوط مائلة', 'نقاط', 'شبكة', 'خطوط أفقية'];
+const CONF_AR = ['منخفضة', 'عادية', 'عالية'];
+const isGeo = si => SATS[si].system === 3;
+THREE.ColorManagement.enabled = false;
+
+function ll2v(latDeg, lonDeg, r = 1, out = new THREE.Vector3()) {
+  const phi = (lonDeg + 180) * DEG, th = latDeg * DEG;
+  return out.set(-Math.cos(phi) * Math.cos(th) * r, Math.sin(th) * r, Math.sin(phi) * Math.cos(th) * r);
+}
+
+// ---------- time range + orbit tables (one per physical satellite) ----------
+let tMin = Infinity, tMax = -Infinity;
+for (let i = 0; i < N; i++) { const t = C.t[i]; if (t < tMin) tMin = t; if (t > tMax) tMax = t; }
+const T0 = tMin - 1800, T1 = tMax + 1800, NS = Math.ceil((T1 - T0) / STEP) + 1;
+const NORADS = [...new Set(SATS.map(s => s.norad))];
+SATS.forEach(s => s.oi = NORADS.indexOf(s.norad));
+const orbit = NORADS.map(n => {
+  const s = SATS.find(x => x.norad === n), rec = satellite.twoline2satrec(s.tle[0], s.tle[1]);
+  const u = new Float32Array(NS * 3), alt = new Float32Array(NS), v = new THREE.Vector3();
+  for (let i = 0; i < NS; i++) {
+    const date = new Date((T0 + i * STEP) * 1000);
+    const pv = satellite.propagate(rec, date);
+    const g = satellite.eciToGeodetic(pv.position, satellite.gstime(date));
+    ll2v(g.latitude / DEG, g.longitude / DEG, 1, v);
+    u.set([v.x, v.y, v.z], i * 3); alt[i] = g.height;
+  }
+  return { u, alt, sats: SATS.map((x, i) => x.norad === n ? i : -1).filter(i => i >= 0) };
+});
+function subpoint(oi, t, out = new THREE.Vector3()) {
+  const o = orbit[oi];
+  let f = (t - T0) / STEP; f = Math.max(0, Math.min(NS - 1.001, f));
+  const i = Math.floor(f), a = f - i, j = i * 3;
+  return out.set(o.u[j] + (o.u[j + 3] - o.u[j]) * a, o.u[j + 1] + (o.u[j + 4] - o.u[j + 1]) * a, o.u[j + 2] + (o.u[j + 5] - o.u[j + 2]) * a).normalize();
+}
+function altAt(oi, t) { return orbit[oi].alt[Math.max(0, Math.min(NS - 1, Math.round((t - T0) / STEP)))]; }
+function satPos(oi, t, out = new THREE.Vector3()) { return subpoint(oi, t, out).multiplyScalar(1 + altAt(oi, t) / R_KM); }
+// half-width of the ground swath (Earth-centre angle, radians) from the instrument's real scan angle and altitude
+function swathHalf(si, altKm) {
+  const th = SATS[si].scan_deg * DEG, k = (R_KM + altKm) / R_KM * Math.sin(th);
+  return k >= 1 ? Math.acos(R_KM / (R_KM + altKm)) : Math.asin(k) - th;
+}
+
+// ---------- per record: real observation time, distance from track, pixel size + orientation ----------
+const FU = new Float32Array(N * 3), TOBS = new Float32Array(N), NADIR = new Float32Array(N);
+const CROSS = new Float32Array(N * 3), ALONG = new Float32Array(N * 3);
+{
+  const F = new THREE.Vector3(), a = new THREE.Vector3(), c = new THREE.Vector3(), q = new THREE.Vector3(), v = new THREE.Vector3(), S = new THREE.Vector3();
+  let ok = 0, polar = 0;
+  for (let i = 0; i < N; i++) {
+    ll2v(C.lat[i], C.lon[i], 1, F);
+    FU.set([F.x, F.y, F.z], i * 3);
+    const si = C.sat[i], s = SATS[si], oi = s.oi;
+    if (s.system === 3) {
+      // geostationary: full-disk image at acq_time; pixel grows with distance and stretches along the look direction
+      TOBS[i] = C.t[i] - tMin;
+      satPos(oi, C.t[i], S); subpoint(oi, C.t[i], q);
+      NADIR[i] = Math.acos(Math.min(1, q.dot(F))) * R_KM;
+      a.copy(q).addScaledVector(F, -q.dot(F));
+      if (a.lengthSq() < 1e-12) a.set(0, 1, 0).addScaledVector(F, -F.y);
+      a.normalize();                                     // "along" = toward the point under the satellite (look direction)
+      c.crossVectors(F, a).normalize();
+      v.subVectors(S, F); const dKm = v.length() * R_KM; v.normalize();
+      const cosVza = Math.max(0.12, v.dot(F));
+      const p0 = s.pixel_km * dKm / 35786;
+      C.scan[i] = +p0.toFixed(2); C.track[i] = +(p0 / cosVza).toFixed(2);
+    } else {
+      const o = orbit[oi].u;
+      const j0 = Math.max(0, Math.floor((C.t[i] - 180 - T0) / STEP));
+      const j1 = Math.min(NS - 1, Math.ceil((C.t[i] + s.granule_s + 420 - T0) / STEP));
+      let best = -2, bj = j0;
+      for (let j = j0; j <= j1; j++) {
+        const d = o[j * 3] * F.x + o[j * 3 + 1] * F.y + o[j * 3 + 2] * F.z;
+        if (d > best) { best = d; bj = j; }
+      }
+      const tObs = T0 + bj * STEP;
+      TOBS[i] = tObs - tMin;
+      NADIR[i] = Math.acos(Math.min(1, best)) * R_KM;
+      polar++;
+      if (NADIR[i] <= swathHalf(si, altAt(oi, tObs)) * R_KM + 100) ok++;
+      subpoint(oi, tObs + STEP, q); subpoint(oi, tObs - STEP, v);
+      a.subVectors(q, v); a.addScaledVector(F, -a.dot(F)).normalize();
+      c.crossVectors(F, a).normalize();
+      if (s.system === 2) { C.scan[i] = s.pixel_km; C.track[i] = s.pixel_km; }
+    }
+    ALONG.set([a.x, a.y, a.z], i * 3); CROSS.set([c.x, c.y, c.z], i * 3);
+  }
+  document.getElementById('validate').textContent =
+    `تحقق المدارات: ${(100 * ok / polar).toFixed(1)}% من سجلات الأقمار القطبية تقع داخل شريط مسح قمرها لحظة رصدها`;
+}
+document.getElementById('genInfo').textContent =
+  `${N.toLocaleString('en')} سجل حقيقي من ${NS_SATS} قمراً/منتجاً · يوم ${D.window[0]} (UTC)`;
+
+// ---------- renderer / scene ----------
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.001, 300);
+camera.position.copy(ll2v(10, 15, 3.6));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.minDistance = 1.002; controls.maxDistance = 25; controls.rotateSpeed = 0.5;
+{
+  const g = new THREE.BufferGeometry(), p = [];
+  for (let i = 0; i < 3000; i++) { const v = new THREE.Vector3().randomDirection().multiplyScalar(120 + Math.random() * 60); p.push(v.x, v.y, v.z); }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x777777, size: 0.25 })));
+}
+
+// earth with real day/night
+const loader = new THREE.TextureLoader();
+const earthU = { dayTex: { value: null }, nightTex: { value: null }, hasTex: { value: 0 }, sunDir: { value: new THREE.Vector3(1, 0, 0) } };
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 256, 128), new THREE.ShaderMaterial({
+  uniforms: earthU,
+  vertexShader: `varying vec2 vUv; varying vec3 vN; void main(){ vUv=uv; vN=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `uniform sampler2D dayTex, nightTex; uniform float hasTex; uniform vec3 sunDir; varying vec2 vUv; varying vec3 vN;
+    void main(){
+      float d = dot(normalize(vN), sunDir), k = smoothstep(-0.10, 0.10, d);
+      vec3 day = hasTex > 0.5 ? texture2D(dayTex, vUv).rgb : vec3(0.12,0.2,0.3);
+      vec3 night = hasTex > 0.5 ? texture2D(nightTex, vUv).rgb * 0.9 + day * 0.07 : vec3(0.02);
+      gl_FragColor = vec4(mix(night, day * (0.75 + 0.25 * max(d, 0.)), k), 1.);
+    }`
+}));
+scene.add(earth);
+Promise.all(['earth-blue-marble.jpg', 'earth-night.jpg'].map(f =>
+  new Promise((res, rej) => loader.load('https://unpkg.com/three-globe@2.31.0/example/img/' + f, res, undefined, rej))))
+  .then(([d, n]) => { earthU.dayTex.value = d; earthU.nightTex.value = n; earthU.hasTex.value = 1; })
+  .catch(() => console.warn('earth textures failed'));
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.015, 64, 32), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.BackSide,
+  vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+  fragmentShader: `varying vec3 vN; varying vec3 vV; void main(){ float f=pow(1.-abs(dot(vN,vV)),3.); gl_FragColor=vec4(0.55,0.65,0.8,f*0.5); }`
+})));
+
+// ---------- fire pixels: oriented real-size footprints with system border + satellite pattern ----------
+const sysCols = SYS.map(s => new THREE.Color(s.col));
+const fireU = {
+  uTime: { value: 0 }, uWindow: { value: 1e9 }, uGeoWin: { value: 900 }, uMinConf: { value: 0 }, uMode: { value: 0 },
+  uPx: { value: 800 }, uMinPx: { value: 2.5 * renderer.getPixelRatio() }, uDpr: { value: renderer.getPixelRatio() },
+  uMask: { value: new Array(16).fill(1) }, uSysCol: { value: sysCols }
+};
+const R_FIRE = 1.00005;
+{
+  const g = new THREE.InstancedBufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
+  g.setIndex([0, 1, 2, 0, 2, 3]);
+  g.instanceCount = N;
+  const iC = new Float32Array(N * 3), iX = new Float32Array(N * 3), iY = new Float32Array(N * 3), aT = new Float32Array(N);
+  const aSat = new Float32Array(N), aSys = new Float32Array(N), aPat = new Float32Array(N), aFrp = new Float32Array(N),
+        aConf = new Float32Array(N), aDn = new Float32Array(N), aGrow = new Float32Array(N);
+  // instances are drawn in order: coarse geostationary first, then MODIS, VIIRS, and the 30 m Landsat pixels on top
+  const RANK = [1, 2, 3, 0], order = Array.from({ length: N }, (_, i) => i).sort((a, b) => RANK[SATS[C.sat[a]].system] - RANK[SATS[C.sat[b]].system] || a - b);
+  for (let n = 0; n < N; n++) {
+    const i = order[n], s = SATS[C.sat[i]], hs = C.scan[i] / 2 / R_KM, ht = C.track[i] / 2 / R_KM;
+    for (let k = 0; k < 3; k++) {
+      iC[n * 3 + k] = FU[i * 3 + k] * R_FIRE; iX[n * 3 + k] = CROSS[i * 3 + k] * hs; iY[n * 3 + k] = ALONG[i * 3 + k] * ht;
+    }
+    aT[n] = TOBS[i]; aSat[n] = C.sat[i]; aSys[n] = s.system; aPat[n] = s.pattern; aFrp[n] = C.frp[i] || 0;
+    aConf[n] = C.conf[i]; aDn[n] = C.dn[i];
+    aGrow[n] = Math.sqrt(C.scan[i] * C.track[i]) / s.pixel_km;
+  }
+  const IA = (arr, n) => new THREE.InstancedBufferAttribute(arr, n);
+  for (const [k, arr, n] of [['iC', iC, 3], ['iX', iX, 3], ['iY', iY, 3], ['aT', aT, 1], ['aSat', aSat, 1], ['aSys', aSys, 1],
+    ['aPat', aPat, 1], ['aFrp', aFrp, 1], ['aConf', aConf, 1], ['aDn', aDn, 1], ['aGrow', aGrow, 1]]) g.setAttribute(k, IA(arr, n));
+  const mesh = new THREE.Mesh(g, new THREE.ShaderMaterial({
+    uniforms: fireU, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: `
+      attribute vec3 iC, iX, iY;
+      attribute float aT, aSat, aSys, aPat, aFrp, aConf, aDn, aGrow;
+      uniform float uTime, uWindow, uGeoWin, uMinConf, uMode, uPx, uMinPx; uniform float uMask[16]; uniform vec3 uSysCol[4];
+      varying vec3 vCol; varying float vFlash, vPx, vSys, vPat; varying vec2 vUv;
+      void main(){
+        float age = uTime - aT;
+        float win = aSys > 2.5 ? min(uWindow, uGeoWin) : uWindow;
+        if (age < 0.0 || age > win || uMask[int(aSat + 0.5)] < 0.5 || aConf < uMinConf - 0.5) { gl_Position = vec4(2.,2.,2.,1.); return; }
+        vec3 c;
+        if (uMode < 0.5) c = uSysCol[int(aSys + 0.5)];
+        else if (uMode < 1.5) { float x = clamp(log(aFrp + 1.) / log(300.), 0., 1.);
+          c = x < 0.5 ? mix(vec3(1.,0.95,0.45), vec3(1.,0.5,0.1), x*2.) : mix(vec3(1.,0.5,0.1), vec3(0.8,0.05,0.25), (x-0.5)*2.); }
+        else if (uMode < 2.5) c = aDn < 0.5 ? vec3(0.95,0.85,0.55) : vec3(0.5,0.6,0.95);
+        else if (uMode < 3.5) c = aConf < 0.5 ? vec3(0.55) : aConf < 1.5 ? vec3(0.95,0.7,0.3) : vec3(1.,0.3,0.25);
+        else { float x = clamp((aGrow - 1.) / 1.6, 0., 1.); c = mix(vec3(0.85), vec3(1.,0.3,0.35), x); }
+        vec4 mvC = modelViewMatrix * vec4(iC, 1.);
+        float px = 2. * max(length(iX), length(iY)) * uPx / max(-mvC.z, 1e-6);
+        float k = max(1., uMinPx / px);
+        vFlash = exp(-age / 120.);
+        if (px * k < 40.) k *= 1. + 4. * vFlash;      // small on screen: flash as a glow; big: just brighten (fragment)
+        vec3 p = iC + (iX * position.x + iY * position.y) * k;
+        vUv = position.xy; vPx = px * k; vCol = mix(c, vec3(1.), (px * k >= 40. ? 0.6 : 0.) * vFlash); vSys = aSys; vPat = aPat;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.);
+      }`,
+    fragmentShader: `
+      uniform float uDpr;
+      varying vec3 vCol; varying float vFlash, vPx, vSys, vPat; varying vec2 vUv;
+      void main(){
+        if (vFlash > 0.08 && vPx < 200.) { float a = smoothstep(1., 0., length(vUv)); gl_FragColor = vec4(mix(vCol, vec3(1.), vFlash * 0.7), a); return; }
+        if (vPx < 12.) { gl_FragColor = vec4(vCol, 0.92); return; }
+        float u = uDpr;
+        vec2 q = vUv * vPx * 0.5 + 4096.;            // device pixels inside the pixel, rotated with it
+        float m = max(abs(vUv.x), abs(vUv.y));
+        if (m > 1. - 2. * 2.2 * u / vPx) {           // border: style tells the system
+          float s = abs(vUv.x) > abs(vUv.y) ? q.y : q.x;
+          bool on = true;
+          if (vSys > 0.5 && vSys < 1.5) on = mod(s, 9. * u) < 5.5 * u;                       // VIIRS dashed
+          else if (vSys > 1.5 && vSys < 2.5) on = mod(s, 5. * u) < 2.2 * u;                  // Landsat dotted
+          else if (vSys > 2.5) { float k = mod(s, 13. * u); on = k < 6.5 * u || (k > 8.6 * u && k < 10.6 * u); } // Geo dash-dot
+          gl_FragColor = vec4(vCol, on ? 1. : 0.1); return;
+        }
+        float P = 7. * u, a;                           // fill pattern: tells the satellite
+        if (vPat < 0.5) a = 0.42;
+        else if (vPat < 1.5) a = mod(q.x + q.y, P) < 2.2 * u ? 0.95 : 0.1;
+        else if (vPat < 2.5) a = length(mod(q, P) - 0.5 * P) < 1.5 * u ? 0.95 : 0.1;
+        else if (vPat < 3.5) a = (mod(q.x + q.y, P) < 1.6 * u || mod(q.x - q.y, P) < 1.6 * u) ? 0.9 : 0.1;
+        else a = mod(q.y, P) < 2. * u ? 0.95 : 0.1;
+        gl_FragColor = vec4(vCol, a);
+      }`
+  }));
+  mesh.frustumCulled = false; mesh.renderOrder = 2;
+  scene.add(mesh);
+}
+
+// ---------- zoom-dependent map tiles, re-projected from Web Mercator onto the sphere ----------
+const TILE_SRC = {
+  sat: { url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, max: 18, attr: 'صور: Esri, Maxar, Earthstar Geographics' },
+  osm: { url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`, max: 19, attr: '© OpenStreetMap contributors' },
+};
+const tileOpt = { layer: 'sat', shade: { value: 1 } };
+const tileGroup = new THREE.Group(); scene.add(tileGroup);
+const tileCache = new Map(), tileQueue = [];
+let tileFrame = 0, tileLoading = 0, tileZ = -1;
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+const tileVS = `varying vec2 vUv; varying vec3 vN; void main(){ vUv = uv; vN = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`;
+const tileFS = `uniform sampler2D map; uniform vec3 sunDir; uniform float uShade; varying vec2 vUv; varying vec3 vN;
+  void main(){ vec3 c = texture2D(map, vUv).rgb; float k = smoothstep(-0.10, 0.10, dot(vN, sunDir));
+    gl_FragColor = vec4(c * (uShade > 0.5 ? mix(0.3, 1., k) : 1.), 1.); }`;
+const tileLat = (z, y) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / 2 ** z))) / DEG;
+function makeTileMesh(t, tex) {
+  const n = 2 ** t.z, S = Math.max(6, Math.min(64, Math.ceil(360 / n / 0.15)));
+  const pos = new Float32Array((S + 1) * (S + 1) * 3), uv = new Float32Array((S + 1) * (S + 1) * 2), idx = [], v = new THREE.Vector3();
+  for (let j = 0; j <= S; j++) for (let i = 0; i <= S; i++) {
+    const k = j * (S + 1) + i;
+    ll2v(tileLat(t.z, t.y + j / S), (t.x + i / S) / n * 360 - 180, t.r, v);
+    pos.set([v.x, v.y, v.z], k * 3); uv[k * 2] = i / S; uv[k * 2 + 1] = 1 - j / S;
+    if (i < S && j < S) idx.push(k, k + S + 1, k + 1, k + 1, k + S + 1, k + S + 2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
+  g.computeBoundingSphere();
+  return new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: { map: { value: tex }, sunDir: earthU.sunDir, uShade: tileOpt.shade }, vertexShader: tileVS, fragmentShader: tileFS, side: THREE.DoubleSide }));
+}
+function needTile(z, x, y, r) {
+  const key = `${tileOpt.layer}/${z}/${x}/${y}`;
+  let t = tileCache.get(key);
+  if (!t) { t = { key, layer: tileOpt.layer, z, x, y, r, state: 'queued', mesh: null }; tileCache.set(key, t); tileQueue.push(t); }
+  t.used = tileFrame;
+}
+function pumpTiles() {
+  while (tileLoading < 8 && tileQueue.length) {
+    const t = tileQueue.pop();
+    if (tileFrame - t.used > 20) { tileCache.delete(t.key); continue; }
+    tileLoading++; t.state = 'loading';
+    loader.load(TILE_SRC[t.layer].url(t.z, t.x, t.y), tex => {
+      tileLoading--; tex.anisotropy = maxAniso;
+      if (!tileCache.has(t.key)) { tex.dispose(); return; }
+      t.mesh = makeTileMesh(t, tex); t.state = 'ready'; tileGroup.add(t.mesh);
+    }, undefined, () => { tileLoading--; t.state = 'error'; });
+  }
+}
+function updateTiles() {
+  tileFrame++;
+  const alt = camera.position.length() - 1, W = view.clientWidth, H = view.clientHeight;
+  const sub = camera.position.clone().normalize();
+  const lat = Math.asin(sub.y) / DEG, lon = Math.atan2(sub.z, -sub.x) / DEG - 180;
+  const kmPerPx = 2 * alt * R_KM * Math.tan(camera.fov * DEG / 2) / H, cosLat = Math.max(0.05, Math.cos(lat * DEG));
+  tileZ = -1;
+  if (tileOpt.layer !== 'none') {
+    tileZ = Math.min(TILE_SRC[tileOpt.layer].max, Math.round(Math.log2(40075 * cosLat / (256 * kmPerPx)) + 0.4));
+    if (tileZ >= 5) {
+      const add = (z, rad, r) => {
+        const n = 2 ** z, cx = (lon + 180) / 360 * n, cy = (1 - Math.log(Math.tan(lat * DEG) + 1 / Math.cos(lat * DEG)) / Math.PI) / 2 * n;
+        for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) {
+          const y = Math.floor(cy) + dy; if (y >= 0 && y < n) needTile(z, ((Math.floor(cx) + dx) % n + n) % n, y, r);
+        }
+      };
+      if (tileZ - 3 >= 5) add(tileZ - 3, 1, 1.000012);
+      add(tileZ, Math.min(5, Math.ceil(Math.max(W, H) * kmPerPx / (40075 * cosLat / 2 ** tileZ) / 2) + 1), 1.00002);
+    }
+  }
+  for (const t of tileCache.values()) if (t.mesh) t.mesh.visible = t.used === tileFrame;
+  pumpTiles();
+  if (tileCache.size > 350) {
+    const old = [...tileCache.values()].filter(t => t.used !== tileFrame && t.state !== 'loading').sort((a, b) => a.used - b.used);
+    for (const t of old.slice(0, tileCache.size - 300)) {
+      if (t.mesh) { tileGroup.remove(t.mesh); t.mesh.geometry.dispose(); t.mesh.material.uniforms.map.value.dispose(); t.mesh.material.dispose(); }
+      tileCache.delete(t.key);
+      const qi = tileQueue.indexOf(t); if (qi >= 0) tileQueue.splice(qi, 1);
+    }
+  }
+  const km = alt * R_KM;
+  document.getElementById('attr').textContent = `ارتفاع الكاميرا ${km < 100 ? km.toFixed(1) : Math.round(km).toLocaleString('en')} كم` +
+    (tileZ >= 5 ? ` · z${tileZ} · ${TILE_SRC[tileOpt.layer].attr}` : '');
+}
+
+// ---------- satellites (one 3D object per physical satellite) ----------
+const SW_N = 150, SW_W = 13, GEO_N = 128;
+const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _v = new THREE.Vector3(), _c = new THREE.Vector3(), _e = new THREE.Vector3();
+const satObjs = orbit.map((o, oi) => {
+  const first = SATS[o.sats[0]], sys = SYS[first.system], col = new THREE.Color(sys.col), geo = first.system === 3;
+  const grp = new THREE.Group();
+  const bodyM = new THREE.MeshBasicMaterial({ color: 0xd8d8d8 }), panelM = new THREE.MeshBasicMaterial({ color: col });
+  grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 1.0), bodyM));
+  const pnl = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.05, 0.7), panelM); grp.add(pnl);
+  const ant = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 12), bodyM); ant.position.y = -0.5; ant.rotation.x = Math.PI; grp.add(ant); // points to nadir
+  scene.add(grp);
+  const obj = { oi, geo, sys: first.system, col, grp, sats: o.sats, on: true };
+  if (!geo) {
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SW_N * SW_W * 3), 3));
+    sg.setAttribute('aA', new THREE.BufferAttribute(new Float32Array(SW_N * SW_W), 1));
+    const idx = []; for (let k = 0; k < SW_N - 1; k++) for (let w = 0; w < SW_W - 1; w++) { const a = k * SW_W + w, b = a + SW_W; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+    sg.setIndex(idx);
+    obj.swath = new THREE.Mesh(sg, new THREE.ShaderMaterial({
+      uniforms: { c: { value: col } }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      vertexShader: `attribute float aA; varying float vA; void main(){ vA=aA; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+      fragmentShader: `uniform vec3 c; varying float vA; void main(){ gl_FragColor=vec4(c, vA); }`
+    }));
+    obj.swath.renderOrder = 1; scene.add(obj.swath);
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
+    obj.fan = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false }));
+    scene.add(obj.fan);
+    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(400 * 3), 3));
+    obj.track = new THREE.Line(tg, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.35 })); scene.add(obj.track);
+  } else {
+    const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(GEO_N * 3), 3));
+    obj.disk = new THREE.LineLoop(cg, new THREE.LineDashedMaterial({ color: col, dashSize: 0.03, gapSize: 0.02, transparent: true, opacity: 0.8 }));
+    scene.add(obj.disk);
+  }
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(geo ? 8 * 3 : 6 * 3), 3));
+  obj.fanLines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: geo ? 0.35 : 0.7 }));
+  scene.add(obj.fanLines);
+  obj.label = document.createElement('div'); obj.label.className = 'lbl'; obj.label.style.color = sys.col;
+  document.getElementById('labels').appendChild(obj.label);
+  return obj;
+});
+
+const opt = { swath: true, fan: true, track: true, labels: true, follow: -1 };
+const L = new THREE.Vector3(), Rr = new THREE.Vector3(), S = new THREE.Vector3(), Nd = new THREE.Vector3(), basis = new THREE.Matrix4();
+function edgesAt(si, oi, t, outL, outR, r) {
+  subpoint(oi, t, _p); subpoint(oi, t + STEP, _q); subpoint(oi, t - STEP, _v);
+  _v.subVectors(_q, _v).normalize(); _c.crossVectors(_p, _v).normalize();
+  const a = swathHalf(si, altAt(oi, t));
+  outL.copy(_p).multiplyScalar(Math.cos(a)).addScaledVector(_c, Math.sin(a)).normalize().multiplyScalar(r);
+  outR.copy(_p).multiplyScalar(Math.cos(a)).addScaledVector(_c, -Math.sin(a)).normalize().multiplyScalar(r);
+}
+function updateSats(tAbs) {
+  for (const o of satObjs) {
+    const vis = o.on, si = o.sats[0], oi = o.oi;
+    satPos(oi, tAbs, S);
+    o.grp.visible = vis;
+    o.grp.position.copy(S);
+    // nadir-pointing attitude: y = up (away from Earth), z = direction of flight
+    const up = _p.copy(S).normalize(), fwd = subpoint(oi, tAbs + STEP, _q).sub(subpoint(oi, tAbs - STEP, _v));
+    fwd.addScaledVector(up, -fwd.dot(up));
+    if (fwd.lengthSq() < 1e-14) fwd.set(0, 1, 0).addScaledVector(up, -up.y);
+    fwd.normalize();
+    basis.makeBasis(_c.crossVectors(up, fwd), up, fwd); o.grp.quaternion.setFromRotationMatrix(basis);
+    o.grp.scale.setScalar(Math.max(0.004, camera.position.distanceTo(S) * 0.011));
+    const altKm = altAt(oi, tAbs);
+    if (!o.geo) {
+      o.swath.visible = vis && opt.swath;
+      if (o.swath.visible) {
+        const P = o.swath.geometry.attributes.position.array, A = o.swath.geometry.attributes.aA.array, half = swathHalf(si, altKm);
+        for (let k = 0; k < SW_N; k++) {
+          const t = tAbs - k * STEP;
+          subpoint(oi, t, _p); subpoint(oi, t + STEP, _q); subpoint(oi, t - STEP, _v);
+          _v.subVectors(_q, _v).normalize(); _c.crossVectors(_p, _v).normalize();
+          const al = 0.32 * Math.pow(1 - k / SW_N, 1.4);
+          for (let w = 0; w < SW_W; w++) {
+            const ang = half * (2 * w / (SW_W - 1) - 1);
+            _e.copy(_p).multiplyScalar(Math.cos(ang)).addScaledVector(_c, Math.sin(ang)).normalize().multiplyScalar(1.002);
+            const j = k * SW_W + w; P[j * 3] = _e.x; P[j * 3 + 1] = _e.y; P[j * 3 + 2] = _e.z;
+            A[j] = (w === 0 || w === SW_W - 1) ? Math.min(1, al * 1.8) : al;
+          }
+        }
+        o.swath.geometry.attributes.position.needsUpdate = true; o.swath.geometry.attributes.aA.needsUpdate = true; o.swath.geometry.computeBoundingSphere();
+      }
+      o.fan.visible = o.fanLines.visible = vis && opt.fan;
+      if (o.fan.visible) {
+        edgesAt(si, oi, tAbs, L, Rr, 1.001); subpoint(oi, tAbs, Nd).multiplyScalar(1.001);
+        o.fan.geometry.attributes.position.array.set([S.x, S.y, S.z, L.x, L.y, L.z, Rr.x, Rr.y, Rr.z]);
+        o.fan.geometry.attributes.position.needsUpdate = true; o.fan.geometry.computeBoundingSphere();
+        o.fanLines.geometry.attributes.position.array.set([S.x, S.y, S.z, L.x, L.y, L.z, S.x, S.y, S.z, Rr.x, Rr.y, Rr.z, S.x, S.y, S.z, Nd.x, Nd.y, Nd.z]);
+        o.fanLines.geometry.attributes.position.needsUpdate = true; o.fanLines.geometry.computeBoundingSphere();
+      }
+      o.track.visible = vis && opt.track;
+      if (o.track.visible) {
+        const P = o.track.geometry.attributes.position.array;
+        for (let k = 0; k < 400; k++) { subpoint(oi, tAbs + (k - 200) * 15, _e).multiplyScalar(1.0015); P.set([_e.x, _e.y, _e.z], k * 3); }
+        o.track.geometry.attributes.position.needsUpdate = true; o.track.geometry.computeBoundingSphere();
+      }
+    } else {
+      // geostationary: the disk it can see (edge = Earth's limb from 35,786 km) + cone lines
+      const sub = subpoint(oi, tAbs, Nd).clone(), g = swathHalf(si, altKm);
+      const e1 = new THREE.Vector3(0, 1, 0).addScaledVector(sub, -sub.y).normalize(), e2 = new THREE.Vector3().crossVectors(sub, e1);
+      o.disk.visible = vis && opt.swath;
+      const P = o.disk.geometry.attributes.position.array, ring = [];
+      for (let k = 0; k < GEO_N; k++) {
+        const a = k / GEO_N * Math.PI * 2;
+        _e.copy(sub).multiplyScalar(Math.cos(g)).addScaledVector(e1, Math.sin(g) * Math.cos(a)).addScaledVector(e2, Math.sin(g) * Math.sin(a)).multiplyScalar(1.002);
+        P.set([_e.x, _e.y, _e.z], k * 3); if (k % (GEO_N / 4) === 0) ring.push(_e.clone());
+      }
+      o.disk.geometry.attributes.position.needsUpdate = true; o.disk.geometry.computeBoundingSphere(); o.disk.computeLineDistances();
+      o.fanLines.visible = vis && opt.fan;
+      o.fanLines.geometry.attributes.position.array.set(ring.flatMap(r => [S.x, S.y, S.z, r.x, r.y, r.z]));
+      o.fanLines.geometry.attributes.position.needsUpdate = true; o.fanLines.geometry.computeBoundingSphere();
+    }
+    const syms = o.sats.map(i => SATS[i].symbol).join(' ');
+    const s0 = SATS[si];
+    o.label.textContent = `${syms} ${s0.name.replace(' FRP', '')} · ${s0.instrument} · ${Math.round(altKm).toLocaleString('en')} km · ±${s0.scan_deg}°`;
+  }
+}
+
+// ---------- sun ----------
+function sunDir(tAbs, out) {
+  const date = new Date(tAbs * 1000), d = tAbs / 86400 - 10957.5;
+  const g = (357.529 + 0.98560028 * d) * DEG, q = 280.459 + 0.98564736 * d;
+  const Lm = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * DEG, e = (23.439 - 0.00000036 * d) * DEG;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(Lm), Math.cos(Lm)), dec = Math.asin(Math.sin(e) * Math.sin(Lm));
+  let lon = (ra - satellite.gstime(date)) / DEG; lon = ((lon + 540) % 360) - 180;
+  return ll2v(dec / DEG, lon, 1, out);
+}
+
+// ---------- selection ----------
+const selGroup = new THREE.Group(); scene.add(selGroup);
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthTest: false }));
+const ghost = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+const sight = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.01, gapSize: 0.006 }));
+const footprints = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }));
+const arrAlong = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.01, 0xffffff);
+const arrCross = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.01, 0xffffff);
+for (const a of [arrAlong, arrCross]) for (const o of [a.line, a.cone]) { o.material.depthTest = false; o.renderOrder = 7; }
+footprints.renderOrder = 5; sight.renderOrder = 5; ring.renderOrder = 6;
+selGroup.add(ring, ghost, sight, footprints, arrAlong, arrCross); selGroup.visible = false;
+let selected = -1;
+const vec3At = (arr, i) => new THREE.Vector3(arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]);
+const COMPASS = ['شمال', 'شمال شرق', 'شرق', 'جنوب شرق', 'جنوب', 'جنوب غرب', 'غرب', 'شمال غرب'];
+function bearing(F, dir) {
+  const north = new THREE.Vector3(0, 1, 0).addScaledVector(F, -F.y).normalize(), east = new THREE.Vector3().crossVectors(north, F);
+  const b = (Math.atan2(dir.dot(east), dir.dot(north)) / DEG + 360) % 360;
+  return `${b.toFixed(0)}° (${COMPASS[Math.round(b / 45) % 8]})`;
+}
+function footprintSegs(i, arr) {
+  const F = vec3At(FU, i), cr = vec3At(CROSS, i), al = vec3At(ALONG, i);
+  const hs = C.scan[i] / 2 / R_KM * 1.08, ht = C.track[i] / 2 / R_KM * 1.08;
+  const corner = (a, b) => F.clone().addScaledVector(cr, a * hs).addScaledVector(al, b * ht).normalize().multiplyScalar(1.00006);
+  const c = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  for (let k = 0; k < 4; k++) { const a = c[k], b = c[(k + 1) % 4]; arr.push(a.x, a.y, a.z, b.x, b.y, b.z); }
+}
+const satOn = new Array(NS_SATS).fill(true);
+function isVisible(i, tRel) {
+  const age = tRel - TOBS[i];
+  const win = isGeo(C.sat[i]) ? Math.min(fireU.uWindow.value, fireU.uGeoWin.value) : fireU.uWindow.value;
+  return age >= 0 && age <= win && satOn[C.sat[i]] && C.conf[i] >= fireU.uMinConf.value;
+}
+const fmtT = t => new Date(t * 1000).toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+const hhmm = t => new Date(t * 1000).toISOString().slice(11, 16);
+const satTag = si => { const s = SATS[si]; return `<span style="color:${SYS[s.system].col}">${s.symbol} ${s.name}</span>`; };
+
+function select(i) {
+  selected = i;
+  if (i < 0) { selGroup.visible = false; return; }
+  selGroup.visible = true; showPanel('info', true);
+  const si = C.sat[i], s = SATS[si], oi = s.oi, sys = SYS[s.system], tObs = TOBS[i] + tMin, geo = s.system === 3;
+  const F = vec3At(FU, i), alongV = vec3At(ALONG, i), crossV = vec3At(CROSS, i);
+  ring.position.copy(F).multiplyScalar(1.00007); ring.lookAt(F.clone().multiplyScalar(2));
+  arrAlong.position.copy(F).multiplyScalar(1.00007); arrAlong.setDirection(geo ? alongV.clone().negate() : alongV); arrAlong.setColor(sys.col);
+  arrCross.position.copy(F).multiplyScalar(1.00007); arrCross.setDirection(crossV); arrCross.setColor(0xffffff);
+  const SP = satPos(oi, tObs, new THREE.Vector3());
+  ghost.position.copy(SP); ghost.material.color.set(sys.col);
+  sight.geometry.setFromPoints([SP, F.clone().multiplyScalar(1.0001)]); sight.computeLineDistances(); sight.material.color.set(sys.col);
+  const toSat = SP.clone().sub(F).normalize();
+  const vza = Math.acos(toSat.dot(F)) / DEG;
+  const scanAng = Math.acos(SP.clone().negate().normalize().dot(F.clone().sub(SP).normalize())) / DEG;
+  const altKm = altAt(oi, tObs);
+
+  const same = [], other = [], segs = [];
+  const rOther = Math.max(1.5, C.scan[i], C.track[i]);
+  const cosSame = Math.cos(25 / R_KM), cosOther = Math.cos(rOther / R_KM);
+  for (let j = 0; j < N; j++) {
+    const d = FU[j * 3] * F.x + FU[j * 3 + 1] * F.y + FU[j * 3 + 2] * F.z;
+    if (d < cosSame) continue;
+    const samePass = C.sat[j] === si && Math.abs(TOBS[j] - TOBS[i]) < (geo ? 1 : 900);
+    if (samePass) { same.push(j); footprintSegs(j, segs); } else if (d >= cosOther) other.push(j);
+  }
+  footprints.geometry.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3)); footprints.geometry.computeBoundingSphere();
+  const sumFrp = same.reduce((a, j) => a + (C.frp[j] || 0), 0);
+  const bySat = {};
+  for (const j of other) { const b = bySat[C.sat[j]] ||= { n: 0, min: 1e9, max: 0, t: [] }; b.n++; const ps = Math.sqrt(C.scan[j] * C.track[j]); b.min = Math.min(b.min, ps); b.max = Math.max(b.max, ps); b.t.push(TOBS[j] + tMin); }
+
+  const confTxt = C.craw[i] >= 0 ? `${C.craw[i]} → ${CONF_AR[C.conf[i]]}` : `${['low', 'nominal', 'high'][C.conf[i]]} → ${CONF_AR[C.conf[i]]}`;
+  const grow = Math.sqrt(C.scan[i] * C.track[i]) / s.pixel_km;
+  const fmtK = v => v == null ? '—' : `${v.toFixed(1)} K ≈ ${(v - 273.15).toFixed(0)}°`;
+  const row = (k, v, ar) => `<tr><td class="k">${k}</td><td class="v">${v}</td><td>${ar}</td></tr>`;
+  const sizeNote = s.system <= 1 ? 'من FIRMS' : 'محسوب من الهندسة';
+  document.getElementById('infoBody').innerHTML = `
+    <div class="card">
+      <b>${satTag(si)}</b> · ${s.instrument} · ${sys.name}<br>
+      <span class="hint">${sys.border} · نقش ${PAT_AR[s.pattern]} · رُصد ${hhmm(tObs)} UTC</span>
+      <table class="rec" style="margin-top:6px">
+        ${row('latitude', C.lat[i].toFixed(5), 'مركز البكسل')}
+        ${row('longitude', C.lon[i].toFixed(5), 'مركز البكسل')}
+        ${row('acq_time', hhmm(C.t[i]).replace(':', ''), geo ? 'وقت الصورة الكاملة' : 'وقت حزمة المسح')}
+        ${row('satellite', s.code, s.name)}
+        ${row('confidence', confTxt, 'الثقة')}
+        ${row('version', D.versions[C.ver[i]], 'المعالجة')}
+        ${row('bright', fmtK(C.b4[i]), 'حرارة البكسل')}
+        ${row('bright_bg', fmtK(C.b5[i]), 'حرارة الخلفية')}
+        ${row('frp', C.frp[i] == null ? '—' : C.frp[i] + ' MW', 'شدة الحريق')}
+        ${row('daynight', C.dn[i] ? 'N' : 'D', C.dn[i] ? 'ليل' : 'نهار')}
+        ${row('scan×track', `${C.scan[i]}×${C.track[i]} km`, `${sizeNote} · ×${grow.toFixed(1)} من البكسل العمودي`)}
+      </table>
+    </div>
+    <div class="card">
+      <b>هندسة الرؤية</b><br>
+      ارتفاع القمر: <b>${Math.round(altKm).toLocaleString('en')} كم</b><br>
+      زاوية المسح عند القمر: <b>${scanAng.toFixed(1)}°</b> من أقصى ±${s.scan_deg}°<br>
+      زاوية النظر من الأرض: <b>${vza.toFixed(0)}°</b> عن العمودي<br>
+      البعد عن النقطة تحت القمر: <b>${Math.round(NADIR[i]).toLocaleString('en')} كم</b><br>
+      <span style="color:${sys.col}">━▶</span> ${geo ? 'اتجاه النظر من القمر' : 'اتجاه حركة القمر (track)'}: <b>${bearing(F, geo ? alongV.clone().negate() : alongV)}</b><br>
+      <span>━▶</span> اتجاه المسح (scan): <b>${bearing(F, crossV)}</b>
+    </div>
+    <div class="card">
+      <b>نفس اللقطة (ضمن 25 كم): ${same.length} سجل</b> · مجموع frp = ${sumFrp.toFixed(1)} MW
+      <div class="hint">الإطارات البيضاء = كل بكسلات ${s.name} في هذه اللقطة نفسها، أي «صورة» الحريق في لحظة واحدة.</div>
+    </div>
+    <div class="card">
+      <b>نفس المكان (ضمن ${rOther.toFixed(1)} كم) من أقمار أو لقطات أخرى: ${other.length}</b>
+      ${other.length ? `<table class="rec">${Object.entries(bySat).sort((a, b) => b[1].n - a[1].n).map(([k, b]) => `<tr>
+        <td>${satTag(+k)}</td><td class="v">${b.n}×</td><td class="v">${b.min.toFixed(2)}–${b.max.toFixed(2)} km</td>
+        <td class="v">${hhmm(Math.min(...b.t))}${b.n > 1 ? '–' + hhmm(Math.max(...b.t)) : ''}</td></tr>`).join('')}</table>
+        <div class="hint">نفس المكان، لكن حجم البكسل ووقت الرصد يختلفان حسب القمر وزاوية النظر.</div>` : '<div class="hint">لا توجد لقطات أخرى قريبة في هذا اليوم.</div>'}
+    </div>
+    <div class="row"><button id="zoomSel">اقترب من البكسلات</button><button id="goObs">اذهب إلى لحظة الرصد</button></div>`;
+  document.getElementById('zoomSel').onclick = () => { opt.follow = -1; followSel.value = -1; flyTo = F.clone().multiplyScalar(geo ? 1.006 : 1.003); };
+  document.getElementById('goObs').onclick = () => { setTime(TOBS[i] - 60); playing = false; updPlay(); };
+}
+
+// ---------- picking ----------
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+let downXY = null;
+renderer.domElement.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 5) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObject(earth)[0];
+  if (hit && window.harmClick && window.harmClick(hit.point.clone().normalize())) return;
+  if (!hit) { select(-1); return; }
+  const P = hit.point.clone().normalize();
+  const pxW = fireU.uPx.value / camera.position.distanceTo(P);
+  const cosT = Math.cos(Math.max(8 / R_KM, 14 * renderer.getPixelRatio() / pxW));
+  let best = -1, bScore = Infinity;
+  for (let i = 0; i < N; i++) {
+    const d = FU[i * 3] * P.x + FU[i * 3 + 1] * P.y + FU[i * 3 + 2] * P.z;
+    if (d < cosT || !isVisible(i, simT)) continue;
+    const hs = C.scan[i] / 2 / R_KM, ht = C.track[i] / 2 / R_KM;
+    const k = Math.max(1, fireU.uMinPx.value / (2 * Math.max(hs, ht) * pxW));
+    const dx = P.x - FU[i * 3], dy = P.y - FU[i * 3 + 1], dz = P.z - FU[i * 3 + 2];
+    const lx = (dx * CROSS[i * 3] + dy * CROSS[i * 3 + 1] + dz * CROSS[i * 3 + 2]) / (hs * k);
+    const ly = (dx * ALONG[i * 3] + dy * ALONG[i * 3 + 1] + dz * ALONG[i * 3 + 2]) / (ht * k);
+    const mm = Math.max(Math.abs(lx), Math.abs(ly));
+    const score = mm <= 1 ? mm : 10 + Math.acos(Math.min(1, d)) * pxW;
+    if (score < bScore) { bScore = score; best = i; }
+  }
+  select(best);
+});
+
+// ---------- UI ----------
+const panels = ['harm', 'ctrl', 'info', 'tl', 'help'];
+let allHidden = false, lastShown = new Set(['ctrl', 'tl']);
+function showPanel(id, on) {
+  document.getElementById(id).classList.toggle('hidden', !on);
+  if (id === 'harm') document.body.classList.toggle('harm-open', on);
+  document.querySelector(`[data-toggle="${id}"]`).classList.toggle('on', on);
+}
+document.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => showPanel(b.dataset.toggle, document.getElementById(b.dataset.toggle).classList.contains('hidden')));
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => showPanel(b.dataset.close, false));
+function toggleAll() {
+  if (!allHidden) { lastShown = new Set(panels.filter(p => !document.getElementById(p).classList.contains('hidden'))); panels.forEach(p => showPanel(p, false)); }
+  else lastShown.forEach(p => showPanel(p, true));
+  allHidden = !allHidden;
+  document.getElementById('hideAll').classList.toggle('on', allHidden);
+}
+document.getElementById('hideAll').onclick = toggleAll;
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'h' || e.key === 'H') toggleAll();
+  if (e.code === 'Space') { e.preventDefault(); playBtn.click(); }
+});
+
+// legend swatches: SVG patterns that match the shader
+const defs = document.getElementById('patdefs');
+defs.innerHTML = SATS.map((s, i) => {
+  const c = SYS[s.system].col;
+  const inner = [
+    `<rect width="6" height="6" fill="${c}" fill-opacity=".45"/>`,
+    `<rect width="6" height="6" fill="${c}" fill-opacity=".1"/><rect width="2" height="6" fill="${c}"/>`,
+    `<rect width="6" height="6" fill="${c}" fill-opacity=".1"/><circle cx="3" cy="3" r="1.2" fill="${c}"/>`,
+    `<rect width="6" height="6" fill="${c}" fill-opacity=".1"/><rect width="1.5" height="6" fill="${c}"/><rect width="6" height="1.5" fill="${c}"/>`,
+    `<rect width="6" height="6" fill="${c}" fill-opacity=".1"/><rect width="6" height="1.8" fill="${c}"/>`,
+  ][s.pattern];
+  const rot = s.pattern === 1 || s.pattern === 3 ? ' patternTransform="rotate(45)"' : '';
+  return `<pattern id="pat${i}" width="6" height="6" patternUnits="userSpaceOnUse"${rot}>${inner}</pattern>`;
+}).join('');
+const swatch = (fill, sys) => `<svg width="30" height="18" style="flex:none"><rect x="1.5" y="1.5" width="27" height="15" fill="${fill}" stroke="${SYS[sys].col}" stroke-width="2" stroke-dasharray="${SYS[sys].dash}"/></svg>`;
+const satBox = document.getElementById('sats'), followSel = document.getElementById('follow');
+const cntEls = [];
+SYS.forEach((sys, k) => {
+  const list = SATS.map((s, i) => [s, i]).filter(([s]) => s.system === k);
+  if (!list.length) return;
+  const h = document.createElement('div'); h.className = 'sys';
+  h.innerHTML = `${swatch('none', k)}<span style="color:${sys.col}">${sys.name}</span><span class="hint">${sys.border}</span>`;
+  satBox.appendChild(h);
+  for (const [s, i] of list) {
+    const el = document.createElement('div'); el.className = 'sat';
+    el.innerHTML = `${swatch(`url(#pat${i})`, k)}<span class="sym" style="color:${sys.col}">${s.symbol}</span><span>${s.name}</span><span class="hint">${s.instrument}</span><span class="cnt">0</span>`;
+    el.onclick = () => {
+      satOn[i] = !satOn[i]; el.classList.toggle('off', !satOn[i]);
+      fireU.uMask.value[i] = satOn[i] ? 1 : 0;
+      for (const o of satObjs) o.on = o.sats.some(j => satOn[j]);
+    };
+    satBox.appendChild(el); cntEls[i] = el.querySelector('.cnt');
+  }
+});
+satObjs.forEach((o, k) => { const op = document.createElement('option'); op.value = k; op.textContent = SATS[o.sats[0]].name.replace(' FRP', ''); followSel.appendChild(op); });
+
+const LEG = [
+  null,
+  ['linear-gradient(90deg,#fff273,#ff801a,#cc0d40)', ['1 MW', '17 MW', '300+ MW']],
+  ['linear-gradient(90deg,#f2d98c 50%,#8099f2 50%)', ['نهار', 'ليل']],
+  ['linear-gradient(90deg,#8c8c8c 33%,#f2b34d 33% 66%,#ff4d40 66%)', ['منخفضة', 'عادية', 'عالية']],
+  ['linear-gradient(90deg,#d9d9d9,#ff4d59)', ['كما تحت القمر', '×1.8', '×2.6+']]
+];
+const modeSel = document.getElementById('mode');
+function updLegend() { const l = LEG[+modeSel.value]; document.getElementById('legend').innerHTML = l ? `<div class="legend" style="background:${l[0]}"></div><div class="lg">${l[1].map(x => `<span>${x}</span>`).join('')}</div>` : ''; }
+modeSel.onchange = () => { fireU.uMode.value = +modeSel.value; updLegend(); }; updLegend();
+document.getElementById('win').onchange = e => fireU.uWindow.value = +e.target.value;
+document.getElementById('geowin').onchange = e => fireU.uGeoWin.value = +e.target.value;
+document.getElementById('minconf').onchange =e => fireU.uMinConf.value = +e.target.value;
+document.getElementById('optSwath').onchange = e => opt.swath = e.target.checked;
+document.getElementById('optFan').onchange = e => opt.fan = e.target.checked;
+document.getElementById('optTrack').onchange = e => opt.track = e.target.checked;
+document.getElementById('optLabels').onchange = e => opt.labels = e.target.checked;
+document.getElementById('layer').onchange = e => tileOpt.layer = e.target.value;
+document.getElementById('optShade').onchange = e => tileOpt.shade.value = e.target.checked ? 1 : 0;
+followSel.onchange = e => opt.follow = +e.target.value;
+let flyTo = null;
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => {
+  const [la, lo] = b.dataset.go.split(',').map(Number);
+  opt.follow = -1; followSel.value = -1;
+  flyTo = ll2v(la, lo, b.dataset.dist ? +b.dataset.dist : Math.max(1.8, Math.min(3, camera.position.length())));
+});
+
+// timeline
+const slider = document.getElementById('slider'), playBtn = document.getElementById('play'), speedSel = document.getElementById('speed');
+const SPAN = tMax - tMin + 900;
+slider.min = -600; slider.max = SPAN; slider.value = 0;
+let simT = 0, playing = true;
+function setTime(t) { simT = Math.max(-600, Math.min(SPAN, t)); slider.value = simT; }
+function updPlay() { playBtn.textContent = playing ? '❚❚' : '▶'; playBtn.classList.toggle('on', playing); }
+playBtn.onclick = () => { playing = !playing; if (simT >= SPAN) setTime(-600); updPlay(); }; updPlay();
+slider.oninput = () => { simT = +slider.value; };
+const hist = document.getElementById('hist'), hctx = hist.getContext('2d');
+const BIN = 900, NB = Math.ceil(SPAN / BIN) + 1, bins = SYS.map(() => new Float32Array(NB));
+for (let i = 0; i < N; i++) { const b = Math.floor(TOBS[i] / BIN); if (b >= 0 && b < NB) bins[SATS[C.sat[i]].system][b]++; }
+let hmax = 1; for (let b = 0; b < NB; b++) { let s = 0; for (const a of bins) s += a[b]; hmax = Math.max(hmax, s); }
+function drawHist() {
+  const w = hist.clientWidth, h = hist.clientHeight; if (!w) return;
+  hist.width = w * devicePixelRatio; hist.height = h * devicePixelRatio;
+  hctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); hctx.clearRect(0, 0, w, h);
+  const x = t => ((t + 600) / (SPAN + 600)) * w, bw = Math.max(1, x(BIN) - x(0) - 1);
+  for (let b = 0; b < NB; b++) { let y = h; SYS.forEach((s, k) => { const v = bins[k][b] / hmax * (h - 12); hctx.fillStyle = s.col; hctx.fillRect(x(b * BIN), y - v, bw, v); y -= v; }); }
+  hctx.fillStyle = '#fff'; hctx.fillRect(x(simT) - 1, 0, 2, h);
+  hctx.fillStyle = 'rgba(255,255,255,.55)'; hctx.font = '10px system-ui';
+  for (let t = Math.ceil(tMin / 10800) * 10800; t < tMin + SPAN; t += 10800) { const xx = x(t - tMin); hctx.fillRect(xx, 0, 1, 3); hctx.fillText(hhmm(t), xx + 2, 9); }
+}
+hist.onclick = e => { const r = hist.getBoundingClientRect(); setTime(((e.clientX - r.left) / r.width) * (SPAN + 600) - 600); };
+
+// ---------- loop ----------
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+  fireU.uPx.value = (h * renderer.getPixelRatio()) / (2 * Math.tan(camera.fov * DEG / 2));
+}
+addEventListener('resize', resize); resize();
+const clock = document.getElementById('clock'), camTmp = new THREE.Vector3(), proj = new THREE.Vector3();
+let last = performance.now(), lastCount = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (playing) { setTime(simT + dt * +speedSel.value); if (simT >= SPAN) { playing = false; updPlay(); } }
+  const tAbs = tMin + simT;
+  fireU.uTime.value = simT;
+  sunDir(tAbs, earthU.sunDir.value);
+  updateSats(tAbs);
+  clock.textContent = fmtT(tAbs);
+
+  const glide = (dir, dist, k) => {
+    const d = camera.position.length(), nd = camera.position.clone().divideScalar(d).lerp(dir, k);
+    if (nd.lengthSq() < 1e-6) nd.set(0, 1, 0);
+    camera.position.copy(nd.normalize().multiplyScalar(d + (dist - d) * k));
+  };
+  if (opt.follow >= 0) glide(subpoint(satObjs[opt.follow].oi, tAbs, camTmp), camera.position.length(), 0.08);
+  else if (flyTo) { glide(flyTo.clone().normalize(), flyTo.length(), 0.08); if (camera.position.distanceTo(flyTo) < (flyTo.length() - 1) * 0.02) flyTo = null; }
+  controls.update();
+  const alt = camera.position.length() - 1, near = Math.max(0.00003, alt * 0.3);
+  if (Math.abs(near - camera.near) / camera.near > 0.05) { camera.near = near; camera.updateProjectionMatrix(); }
+  controls.zoomSpeed = alt < 0.05 ? 0.5 : 1;
+
+  if (selected >= 0) {
+    ring.scale.setScalar(Math.max(alt * 0.012, 0.00004));
+    const Lr = alt * 0.06; arrAlong.setLength(Lr, Lr * 0.3, Lr * 0.15); arrCross.setLength(Lr * 0.8, Lr * 0.24, Lr * 0.12);
+    ghost.scale.setScalar(Math.max(0.002, camera.position.distanceTo(ghost.position) * 0.006));
+  }
+  updateTiles();
+
+  const w = view.clientWidth, h = view.clientHeight, cp = camera.position;
+  for (const o of satObjs) {
+    if (!o.on || !opt.labels) { o.label.style.display = 'none'; continue; }
+    const sp = o.grp.position, d = _e.subVectors(sp, cp), len = d.length(); d.divideScalar(len);
+    const b = cp.dot(d), disc = b * b - (cp.lengthSq() - 1), tHit = -b - Math.sqrt(Math.max(disc, 0));
+    proj.copy(sp).project(camera);
+    o.label.style.display = (disc > 0 && tHit > 0 && tHit < len) || proj.z > 1 ? 'none' : '';
+    o.label.style.left = ((proj.x + 1) / 2 * w) + 'px'; o.label.style.top = ((1 - proj.y) / 2 * h) + 'px';
+  }
+  if (now - lastCount > 300) {
+    lastCount = now;
+    const cnt = new Array(NS_SATS).fill(0);
+    for (let i = 0; i < N; i++) if (isVisible(i, simT)) cnt[C.sat[i]]++;
+    cnt.forEach((c, i) => cntEls[i] && (cntEls[i].textContent = c.toLocaleString('en')));
+    drawHist();
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+// =====================================================================================================
+// HARMONIZATION: MODIS/VIIRS fire-day calendar, algorithms, live conversion of today's records
+// =====================================================================================================
+const H = window.HARM_DATA || { regions: {}, global_calib: null };
+document.body.classList.add('harm-open'); lastShown.add('harm');
+const $h = id => document.getElementById(id);
+const fmtN = (x, d = 0) => x == null || !isFinite(x) ? '–' : Number(x).toLocaleString('en', { maximumFractionDigits: d, minimumFractionDigits: d });
+const sgnP = x => (x > 0 ? '+' : '') + fmtN(x) + '%';
+const MON = ['ينا', 'فبر', 'مار', 'أبر', 'ماي', 'يون', 'يول', 'أغس', 'سبت', 'أكت', 'نوف', 'ديس'];
+const MONF = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+const HY0 = 2001;
+// algorithms: series key, Arabic name, short explanation, which evaluation row scores it
+const ALGS = [
+  { k: 'ensemble_adaptive', n: 'المزيج التكيّفي (موصى به)', d: 'متوسط نسبة شهرية ومنحنى FRP موسمي، يُعايَر على 2012–2021 مع وزن أكبر للسنوات الأحدث (عمر نصفي سنتان).', ev: ['ensemble', 'forward_adaptive'], c: '#3987e5' },
+  { k: 'ensemble_geom_adaptive', n: 'المزيج التكيّفي + هندسة مدار Aqua', d: 'مثل السابق، ومنحنى FRP منفصل حسب حجم بكسل Aqua المتوقع (دورة 16 يوماً).', ev: ['ensemble_geom', 'forward_adaptive'], c: '#1baf7a' },
+  { k: 'ensemble', n: 'المزيج (معايرة ثابتة)', d: 'نفس المزيج بأوزان متساوية لسنوات 2012–2021.', ev: ['ensemble', 'forward'], c: '#9085e9' },
+  { k: 'frp_season_adaptive', n: 'منحنى FRP الموسمي', d: 'احتمال أن يرى Aqua كل خلية حسب FRP الذي قاسه VIIRS والموسم.', ev: ['frp_season', 'forward_adaptive'], c: '#d55181' },
+  { k: 'ratio_month_adaptive', n: 'نسبة لكل شهر', d: 'نسبة Aqua ÷ S-NPP لكل شهر من السنة.', ev: ['ratio_month', 'forward_adaptive'], c: '#c98500' },
+  { k: 'ratio', n: 'نسبة ثابتة واحدة', d: 'رقم واحد يُضرب فيه VIIRS دائماً.', ev: ['ratio', 'forward'], c: '#e66767' },
+  { k: 'naive', n: 'ربط مباشر (أيام حريق)', d: 'MODIS حتى 2011 ثم VIIRS كما هو. يصنع قفزة وهمية عند 2012.', ev: ['switch', 'loyo'], c: '#d95926' },
+  { k: 'raw_rows', n: 'ربط مباشر (عدّ الأسطر)', d: 'عدّ كل أسطر FIRMS من كل الأقمار، بالتكرار. لا يصلح للمقارنة.', ev: ['raw_switch', 'loyo'], c: '#888' },
+  { k: 'aqua_only', n: 'Aqua وحده (مرجع INPE)', d: 'قمر واحد طوال الفترة. يصلح حتى 2021، ثم ينجرف وقت مروره من 13:20 إلى حوالي 15:15.', ev: null, c: '#f0efec' },
+];
+const ALG = Object.fromEntries(ALGS.map(a => [a.k, a]));
+const REGK = Object.keys(H.regions).sort((a, b) => (['punjab', 'ssudan', 'portugal', 'bolivia'].indexOf(a) + 1 || 99) - (['punjab', 'ssudan', 'portugal', 'bolivia'].indexOf(b) + 1 || 99));
+const HS = { reg: REGK[0] || 'custom', bbox: null, y0: 2001, m0: 0, y1: 2026, m1: 9, alg: 'ensemble_adaptive', tab: 'sum', calMode: 'value', base: 'median', cmap: 'cividis', cmpOn: new Set(['ensemble_adaptive', 'ratio', 'naive', 'aqua_only']), cells: true, drawing: 0, p1: null };
+const RG = () => H.regions[HS.reg];
+
+// ---------- color maps (perceptually ordered; cividis is safe for colour-vision deficiency) ----------
+const CMAPS = {
+  cividis: ['#00204c', '#213d6b', '#555b6c', '#7b7a77', '#a59c74', '#d3c164', '#ffe945'],
+  inferno: ['#000004', '#320a5e', '#781c6d', '#bc3754', '#ed6925', '#fbb61a', '#fcffa4'],
+  blues: ['#101c2c', '#123a63', '#1c5cab', '#3987e5', '#86b6ef', '#cde2fb'],
+};
+const h2r = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mixC = (a, b, t) => { const A = h2r(a), B = h2r(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',')})`; };
+const ramp = (stops, t) => { t = Math.max(0, Math.min(1, t)) * (stops.length - 1); const i = Math.min(stops.length - 2, Math.floor(t)); return mixC(stops[i], stops[i + 1], t - i); };
+const divC = v => { const t = Math.min(1, Math.abs(v) / 2); return v >= 0 ? mixC('#3a3a38', '#e34948', t) : mixC('#3a3a38', '#3987e5', t); };
+
+// ---------- region / range helpers ----------
+const mIdx = (y, m) => (y - HY0) * 12 + m;
+function rangeMonths(NM) { const a = Math.max(0, mIdx(HS.y0, HS.m0)), b = Math.min(NM - 1, mIdx(HS.y1, HS.m1)); const out = []; for (let m = a; m <= b; m++) out.push(m); return out; }
+function baseline(arr) {
+  const out = [];
+  for (let c = 0; c < 12; c++) { const xs = []; for (let y = 2003; y <= 2022; y++) { const v = arr[mIdx(y, c)]; if (v != null) xs.push(v); } xs.sort((a, b) => a - b);
+    out.push(HS.base === 'median' ? (xs[Math.floor((xs.length - 1) / 2)] + xs[Math.ceil((xs.length - 1) / 2)]) / 2 : xs.reduce((a, b) => a + b, 0) / xs.length); }
+  return out;
+}
+function curBBox() { return HS.bbox || (RG() ? RG().bbox : [-180, -90, 180, 90]); }
+
+// ---------- globe overlays: region box + fire-day cells for today's records ----------
+const boxLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: true }));
+boxLine.renderOrder = 8; scene.add(boxLine);
+const cellLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 }));
+cellLines.renderOrder = 9; scene.add(cellLines);
+function drawBox(bb) {
+  const [w, s, e, n] = bb, pts = [], k = 60;
+  for (let i = 0; i <= k; i++) pts.push(ll2v(s, w + (e - w) * i / k, 1.0004));
+  for (let i = 0; i <= k; i++) pts.push(ll2v(s + (n - s) * i / k, e, 1.0004));
+  for (let i = 0; i <= k; i++) pts.push(ll2v(n, e - (e - w) * i / k, 1.0004));
+  for (let i = 0; i <= k; i++) pts.push(ll2v(n - (n - s) * i / k, w, 1.0004));
+  boxLine.geometry.setFromPoints(pts);
+}
+
+// ---------- live conversion of TODAY's records inside the box ----------
+const G_DEG = H.cell_deg || 0.02, NBINS = H.nb || 24;
+const fbin = f => Math.max(0, Math.min(NBINS - 1, Math.floor((Math.log10(Math.max(f, 0.05)) + 1.5) / 0.25)));
+const SAT_I = Object.fromEntries(SATS.map((s, i) => [s.code, i]));
+function liveCells(bb) {
+  // fire-day cells (~2 km x local solar day) per satellite, same filters as the archive analysis
+  const [w, s, e, n] = bb, per = {}, rows = {};
+  for (let i = 0; i < N; i++) {
+    const la = C.lat[i], lo = C.lon[i];
+    if (la < s || la > n || lo < w || lo > e) continue;
+    const si = C.sat[i], sat = SATS[si]; rows[si] = (rows[si] || 0) + 1;
+    if (sat.system === 0 && !(C.craw[i] >= 30)) continue;
+    if (sat.system === 1 && C.conf[i] < 1) continue;
+    const day = Math.floor((C.t[i] + lo / 15 * 3600) / 86400);
+    const key = day + ':' + Math.floor(la / G_DEG) + ':' + Math.floor(lo / G_DEG);
+    const m = per[si] ||= new Map(); const v = m.get(key);
+    if (v) { v.n++; v.frp += C.frp[i] || 0; } else m.set(key, { n: 1, frp: C.frp[i] || 0, la, lo });
+  }
+  return { per, rows };
+}
+function convert(P, cellMap, month) {
+  if (!P || !cellMap) return null;
+  const se = Math.floor(month / 3), Rc = cellMap.size; let frpSum = 0;
+  for (const v of cellMap.values()) frpSum += P.rho_season[se][fbin(v.frp)];
+  const frp = frpSum + P.extra[month] * Rc, rm = P.k_month[month] * Rc;
+  return { ratio: P.k_single * Rc, ratio_month: rm, frp_season: frp, ensemble: (frp + rm) / 2, cells: Rc };
+}
+function updateCellOverlay(live) {
+  const segs = [], cols = [];
+  if (HS.cells && live) {
+    const keyset = (codes) => { const s = new Set(); for (const c of codes) { const m = live.per[SAT_I[c]]; if (m) for (const [k, v] of m) s.add(k.split(':').slice(1).join(':')); } return s; };
+    const mod = keyset(['T', 'A']), vii = keyset(['N', 'N20', 'N21']);
+    const all = new Set([...mod, ...vii]);
+    let k = 0;
+    for (const key of all) {
+      if (++k > 20000) break;
+      const [i, j] = key.split(':').map(Number), la0 = i * G_DEG, lo0 = j * G_DEG, r = 1.00008;
+      const c = mod.has(key) && vii.has(key) ? [1, 1, 1] : mod.has(key) ? [0.91, 0.64, 0.24] : [0.31, 0.7, 0.85];
+      const p = [ll2v(la0, lo0, r), ll2v(la0, lo0 + G_DEG, r), ll2v(la0 + G_DEG, lo0 + G_DEG, r), ll2v(la0 + G_DEG, lo0, r)];
+      for (let q = 0; q < 4; q++) { const a = p[q], b = p[(q + 1) % 4]; segs.push(a.x, a.y, a.z, b.x, b.y, b.z); cols.push(...c, ...c); }
+    }
+  }
+  cellLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3));
+  cellLines.geometry.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  cellLines.geometry.computeBoundingSphere();
+}
+
+// ---------- SVG helpers ----------
+function niceMaxH(v) { const p = Math.pow(10, Math.floor(Math.log10(Math.max(v, 1e-9)))); for (const k of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (k * p >= v) return k * p; return 10 * p; }
+function bindTip(box, sel, html) {
+  if (!box) return;
+  const tip = document.createElement('div'); tip.className = 'htip'; tip.hidden = true; box.appendChild(tip);
+  box.querySelectorAll(sel).forEach(el => {
+    const show = ev => { tip.innerHTML = html(el); tip.hidden = false; const r = box.getBoundingClientRect(); let x = ev.clientX - r.left + 12; if (x + 180 > r.width) x -= 200; tip.style.left = Math.max(0, x) + 'px'; tip.style.top = (ev.clientY - r.top + 12) + 'px'; };
+    el.addEventListener('pointermove', show); el.addEventListener('pointerleave', () => tip.hidden = true);
+  });
+}
+
+// ---------- tab renderers ----------
+function noRegion() {
+  const bb = curBBox().map(v => v.toFixed(2)).join(',');
+  return `<div class="note">لا يوجد أرشيف محسوب لهذه المنطقة بعد. التحليل اللحظي في تبويب «على الكرة الآن» يعمل (بالمعايرة العالمية). لبناء تقويمها من 2001 حتى الآن شغّل:</div>
+    <code class="cmd">python3 tools/harmonize.py --name myarea --title "منطقتي" --country &lt;Country_Name&gt; --bbox=${bb}</code>
+    <div class="hint">اسم الدولة كما في ملفات FIRMS (مثل Lebanon أو South_Sudan). الأداة تنزّل الأرشيف، وتقيّم الخوارزميات، وتعاير المنطقة، ثم تضيفها إلى هذه القائمة.</div>`;
+}
+function renderSum() {
+  const R = RG(); if (!R) return noRegion();
+  const arr = R.series[HS.alg], ms = rangeMonths(R.NM), base = baseline(R.series[HS.alg]);
+  const tot = ms.reduce((a, m) => a + arr[m], 0);
+  const peak = ms.reduce((a, m) => arr[m] > arr[a] ? m : a, ms[0]);
+  const byY = {}; ms.forEach(m => byY[HY0 + Math.floor(m / 12)] = (byY[HY0 + Math.floor(m / 12)] || 0) + arr[m]);
+  const fullY = Object.entries(byY).filter(([y]) => ms.filter(m => HY0 + Math.floor(m / 12) == y).length === 12);
+  const topY = fullY.sort((a, b) => b[1] - a[1])[0];
+  const hi = ms.filter(m => base[m % 12] > 0 && arr[m] > 1.5 * base[m % 12]).length;
+  const last = ms[ms.length - 1], lv = arr[last], lb = base[last % 12];
+  const same = []; for (let y = HY0; y <= 2026; y++) { const mm = mIdx(y, last % 12); if (mm < R.NM) same.push(arr[mm]); }
+  const rank = same.filter(v => v > lv).length + 1;
+  const ev = ALG[HS.alg].ev && R.eval[ALG[HS.alg].ev[0]];
+  const err = ev ? ev[ALG[HS.alg].ev[1]] : null;
+  const rows = R.sensor_rows, cd = R.sensor_celldays, sumR = k => ms.reduce((a, m) => a + (rows[k] ? rows[k][m] : 0), 0), sumC = k => ms.reduce((a, m) => a + (cd[k] ? cd[k][m] : 0), 0);
+  const ym = m => `${MONF[m % 12]} ${HY0 + Math.floor(m / 12)}`;
+  const meanAq = R.eval_aqua.length ? R.eval_aqua.reduce((a, b) => a + b, 0) / R.eval_aqua.length : 0;
+  const warn = meanAq < 150 ? `<div class="note" style="border-color:#e8a33d">تنبيه: حرائق هذه المنطقة قليلة (متوسط ${fmtN(meanAq)} يوم حريق شهرياً عند Aqua)، فالأرقام الشهرية فيها ضجيج كبير والخطأ الشهري المقيس ${err != null ? fmtN(err) + '%' : 'مرتفع'}. اعتمد على المجاميع الفصلية أو السنوية، أو وسّع المستطيل.</div>` : '';
+  return `${warn}<div class="grid2">
+    <div class="kpi"><div class="k">أيام الحريق في الفترة</div><div class="v">${fmtN(tot)}</div><div class="s">${ms.length} شهراً · مكافئ Aqua</div></div>
+    <div class="kpi"><div class="k">${ym(last)} مقابل ${HS.base === 'median' ? 'الوسيط' : 'المتوسط'}</div><div class="v" style="color:${lv > 1.5 * lb ? '#ff6b6b' : lv < 0.67 * lb ? '#6da7ec' : 'inherit'}">${lb > 0 ? sgnP((lv / lb - 1) * 100) : '–'}</div><div class="s">${fmtN(lv)} مقابل ${fmtN(lb)} · الترتيب ${rank} من ${same.length}</div></div>
+    <div class="kpi"><div class="k">أعلى شهر</div><div class="v">${fmtN(arr[peak])}</div><div class="s">${ym(peak)}</div></div>
+    <div class="kpi"><div class="k">أعلى سنة كاملة</div><div class="v">${topY ? fmtN(topY[1]) : '–'}</div><div class="s">${topY ? topY[0] : 'لا توجد سنة كاملة في الفترة'}</div></div>
+    <div class="kpi"><div class="k">أشهر استثنائية (&gt; 1.5×)</div><div class="v">${hi}</div><div class="s">مقابل ${HS.base === 'median' ? 'وسيط' : 'متوسط'} الشهر 2003–2022</div></div>
+    <div class="kpi"><div class="k">خطأ هذه الخوارزمية (مقيس)</div><div class="v">${err != null ? fmtN(err, 1) + '%' : '–'}</div><div class="s">${ev ? (ALG[HS.alg].ev[1] === 'loyo' ? 'إخفاء سنة' : ALG[HS.alg].ev[1] === 'forward' ? 'اختبار للأمام' : 'اختبار للأمام، تكيّفي') : 'لا تقييم (هو المرجع)'}</div></div>
+  </div>
+  <h3>عدد الرصدات في الفترة لكل قمر (أرشيف FIRMS بعد التصفية)</h3>
+  <table class="ht"><tr><th>القمر</th><th class="n">أسطر</th><th class="n">أيام حريق (خلايا 2 كم)</th><th class="n">سطر لكل خلية</th></tr>
+  ${[['T', 'Terra (MODIS)'], ['A', 'Aqua (MODIS)'], ['S', 'S-NPP (VIIRS)'], ['N20', 'NOAA-20 (VIIRS)']].map(([k, nm]) => `<tr><td>${nm}</td><td class="n">${fmtN(sumR(k))}</td><td class="n">${fmtN(sumC(k))}</td><td class="n">${sumC(k) ? fmtN(sumR(k) / sumC(k), 2) : '–'}</td></tr>`).join('')}</table>
+  <div class="note">${ALG[HS.alg].d}</div>`;
+}
+function renderCal() {
+  const R = RG(); if (!R) return noRegion();
+  const arr = R.series[HS.alg], ms = rangeMonths(R.NM), base = baseline(arr);
+  const ys = [...new Set(ms.map(m => HY0 + Math.floor(m / 12)))];
+  const vals = ms.map(m => arr[m]); const maxV = Math.max(1, ...vals);
+  const W = 590, lw = 58, rw = 58, top = 18, ch = 15, cw = (W - lw - rw) / 12, Hh = top + ys.length * (ch + 2) + 4;
+  let s = `<svg viewBox="0 0 ${W} ${Hh}" id="calSvg" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${Hh}" fill="#121418"/>`;
+  MON.forEach((m, i) => s += `<text x="${lw + i * cw + cw / 2}" y="12" text-anchor="middle">${m}</text>`);
+  s += `<text x="${W - 4}" y="12" text-anchor="end">مجموع السنة</text>`;
+  const yt = {}; ms.forEach(m => { const y = HY0 + Math.floor(m / 12); yt[y] = (yt[y] || 0) + arr[m]; });
+  const maxY = Math.max(...Object.values(yt));
+  ys.forEach((y, r) => {
+    const yy = top + r * (ch + 2), src = HS.alg === 'naive' ? (y < 2012 ? 'M' : 'V') : HS.alg === 'raw_rows' ? '*' : HS.alg === 'aqua_only' ? 'A' : (y === 2002 ? 'T/A' : R.src[mIdx(y, 0)]);
+    s += `<text x="2" y="${yy + ch - 3}">${y}</text><text x="${lw - 4}" y="${yy + ch - 3}" text-anchor="end" style="fill:#ccc;font-weight:600">${src}</text>`;
+    for (let c = 0; c < 12; c++) {
+      const m = mIdx(y, c), x = lw + c * cw;
+      if (!ms.includes(m)) { s += `<rect x="${x + 1}" y="${yy}" width="${cw - 2}" height="${ch}" rx="2" fill="none" stroke="#2a2d33" stroke-dasharray="2 2"/>`; continue; }
+      const v = arr[m], b = base[c];
+      const fill = HS.calMode === 'value' ? ramp(CMAPS[HS.cmap], Math.sqrt(v / maxV)) : divC(Math.max(-2, Math.min(2, Math.log2((v + 1) / (b + 1)))));
+      s += `<rect class="cc" data-m="${m}" x="${x + 1}" y="${yy}" width="${cw - 2}" height="${ch}" rx="2" fill="${fill}"/>`;
+    }
+    const bw = (rw - 8) * (yt[y] / maxY);
+    s += `<rect x="${W - rw + 4}" y="${yy + 3}" width="${bw}" height="${ch - 6}" rx="2" fill="#9a9a9a" opacity=".5"/><text x="${W - 2}" y="${yy + ch - 3}" text-anchor="end" style="fill:#ddd">${fmtN(yt[y] / 1000, 1)}k</text>`;
+  });
+  s += '</svg>';
+  const leg = HS.calMode === 'value' ? `<div class="legend" style="background:linear-gradient(90deg,${CMAPS[HS.cmap].join(',')})"></div><div class="lg"><span>0</span><span>${fmtN(maxV / 4)}</span><span>${fmtN(maxV)} يوم حريق</span></div>`
+    : `<div class="legend" style="background:linear-gradient(90deg,${[-2, -1, 0, 1, 2].map(divC).join(',')})"></div><div class="lg"><span>÷4</span><span>÷2</span><span>= ${HS.base === 'median' ? 'الوسيط' : 'المتوسط'}</span><span>×2</span><span>×4</span></div>`;
+  setTimeout(() => bindTip($h('calBox'), 'rect.cc', el => { const m = +el.dataset.m, v = arr[m], b = base[m % 12];
+    return `<b>${MONF[m % 12]} ${HY0 + Math.floor(m / 12)}</b><br>أيام الحريق: <b>${fmtN(v)}</b><br>${HS.base === 'median' ? 'الوسيط' : 'المتوسط'} 2003–2022: ${fmtN(b)}<br>عن المعتاد: <b>${b > 0 ? sgnP((v / b - 1) * 100) : '–'}</b><br>Aqua الفعلي: ${fmtN(R.series.aqua_only[m])}<br><span class="hint">${{ T: 'Terra محوّل', A: 'Aqua مباشرة', V: 'VIIRS محوّل' }[R.src[m]]}</span>`; }), 0);
+  return `<div class="row">العرض: <button data-cm="value" class="${HS.calMode === 'value' ? 'on' : ''}">العدد</button><button data-cm="anom" class="${HS.calMode === 'anom' ? 'on' : ''}">الشذوذ</button>
+    المرجع: <select id="hBase"><option value="median">وسيط 2003–2022</option><option value="mean">متوسط 2003–2022</option></select>
+    الألوان: <select id="hCmap"><option value="cividis">Cividis (آمن لعمى الألوان)</option><option value="inferno">Inferno</option><option value="blues">أزرق</option></select></div>
+    ${leg}<div class="hchart" id="calBox">${s}</div>
+    <div class="hint">الحرف بجانب السنة = المصدر: T Terra محوّل، A Aqua، V VIIRS محوّل، M MODIS خام. الشريط على اليمين = مجموع السنة.</div>`;
+}
+function renderAlg() {
+  const R = RG(); if (!R) return noRegion();
+  const ys = []; for (let y = Math.max(2001, HS.y0); y <= Math.min(2025, HS.y1); y++) ys.push(y);
+  const on = ALGS.filter(a => HS.cmpOn.has(a.k));
+  const ann = a => ys.map(y => { let s = 0; for (let c = 0; c < 12; c++) s += R.series[a.k][mIdx(y, c)] || 0; return s; });
+  const data = on.map(a => ({ a, v: ann(a) }));
+  const W = 590, Hc = 230, m = { l: 48, r: 10, t: 10, b: 22 };
+  const maxV = niceMaxH(Math.max(1, ...data.flatMap(d => d.v)) * 1.05);
+  const x = i => m.l + (ys.length < 2 ? 0 : i / (ys.length - 1)) * (W - m.l - m.r), y = v => Hc - m.b - v / maxV * (Hc - m.t - m.b);
+  let s = `<svg viewBox="0 0 ${W} ${Hc}" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${Hc}" fill="#121418"/>`;
+  for (let i = 0; i <= 4; i++) { const v = maxV * i / 4; s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="#2a2d33"/><text x="${m.l - 4}" y="${y(v) + 3}" text-anchor="end">${fmtN(v)}</text>`; }
+  [[2012, 'VIIRS'], [2022, 'انجراف Aqua']].forEach(([yr, lab]) => { const i = ys.indexOf(yr); if (i >= 0) s += `<line x1="${x(i)}" x2="${x(i)}" y1="${m.t}" y2="${Hc - m.b}" stroke="#555" stroke-dasharray="3 3"/><text x="${x(i) + 3}" y="${m.t + 9}">${lab}</text>`; });
+  ys.forEach((yr, i) => { if (yr % 3 === 1 || ys.length < 10) s += `<text x="${x(i)}" y="${Hc - 6}" text-anchor="middle">${yr}</text>`; });
+  data.forEach(d => s += `<path d="${d.v.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('')}" fill="none" stroke="${d.a.c}" stroke-width="${d.a.k === HS.alg ? 2.6 : 1.6}"/>`);
+  s += `</svg>`;
+  // evaluation table for this region (real held-out tests from tools/harmlib.py)
+  const evRows = [['ensemble_geom', 'المزيج + هندسة المدار'], ['ensemble', 'المزيج'], ['frp_season', 'منحنى FRP الموسمي'], ['frp', 'منحنى FRP'], ['ratio_month', 'نسبة لكل شهر'], ['ratio', 'نسبة ثابتة']];
+  const cols = [['loyo', 'إخفاء سنة'], ['forward', 'للأمام'], ['forward_adaptive', 'للأمام، تكيّفي']];
+  const best = Object.fromEntries(cols.map(([c]) => [c, Math.min(...evRows.map(([k]) => R.eval[k] ? R.eval[k][c] : 1e9))]));
+  const tbl = `<table class="ht"><tr><th>الخوارزمية</th>${cols.map(([, n]) => `<th class="n">${n}</th>`).join('')}</tr>
+    ${evRows.filter(([k]) => R.eval[k]).map(([k, n]) => `<tr><td>${n}</td>${cols.map(([c]) => `<td class="n ${R.eval[k][c] === best[c] ? 'best' : ''}">${fmtN(R.eval[k][c], 1)}%</td>`).join('')}</tr>`).join('')}
+    <tr><td>ربط مباشر (أيام حريق)</td><td class="n">${fmtN(R.eval.switch.loyo, 1)}%</td><td class="n">–</td><td class="n">–</td></tr>
+    <tr><td>ربط مباشر (أسطر)</td><td class="n">${fmtN(R.eval.raw_switch.loyo, 1)}%</td><td class="n">–</td><td class="n">–</td></tr></table>`;
+  // global benchmark incl. AI rows (four regions, from the full study)
+  const B = H.benchmark; let btbl = '';
+  if (B) { const reg = B.order.includes(HS.reg) ? HS.reg : null;
+    const rows = B.rows.filter(r => r.loyo || r.fw).map(r => ({ n: r.name, l: r.loyo ? (reg ? r.loyo[reg] : null) : null, f: r.fw ? (reg ? r.fw[reg] : null) : null, la: r.loyo ? B.order.reduce((a, g) => a + r.loyo[g], 0) / 4 : null, fa: r.fw ? B.order.reduce((a, g) => a + r.fw[g], 0) / 4 : null }))
+      .sort((a, b) => (a.la ?? a.fa) - (b.la ?? b.fa));
+    btbl = `<h3>كل الطرق المختبرة (الدراسة الكاملة، 4 مناطق) ${reg ? '· عمود هذه المنطقة' : ''}</h3><table class="ht"><tr><th>الطريقة</th>${reg ? '<th class="n">هنا: إخفاء سنة</th><th class="n">هنا: للأمام</th>' : ''}<th class="n">متوسط: إخفاء سنة</th><th class="n">متوسط: للأمام</th></tr>
+      ${rows.map(r => `<tr><td>${r.n}</td>${reg ? `<td class="n">${r.l != null ? fmtN(r.l, 1) + '%' : '–'}</td><td class="n">${r.f != null ? fmtN(r.f, 1) + '%' : '–'}</td>` : ''}<td class="n">${r.la != null ? fmtN(r.la, 1) + '%' : '–'}</td><td class="n">${r.fa != null ? fmtN(r.fa, 1) + '%' : '–'}</td></tr>`).join('')}</table>`; }
+  // held-out monthly chart: Aqua vs selected evaluation method
+  const ek = (ALG[HS.alg].ev && R.eval[ALG[HS.alg].ev[0]] && R.eval[ALG[HS.alg].ev[0]].loyo_monthly) ? ALG[HS.alg].ev[0] : 'ensemble';
+  const lm = R.eval[ek].loyo_monthly, aq = R.eval_aqua, mxL = niceMaxH(Math.max(...lm, ...aq) * 1.05), Hl = 170;
+  const xl = i => 40 + i / (aq.length - 1) * (W - 50), yl = v => Hl - 18 - v / mxL * (Hl - 28);
+  let l = `<svg viewBox="0 0 ${W} ${Hl}" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${Hl}" fill="#121418"/>`;
+  for (let i = 0; i <= 3; i++) { const v = mxL * i / 3; l += `<line x1="40" x2="${W - 10}" y1="${yl(v)}" y2="${yl(v)}" stroke="#2a2d33"/><text x="36" y="${yl(v) + 3}" text-anchor="end">${fmtN(v)}</text>`; }
+  for (let y = 2012; y <= 2021; y++) l += `<text x="${xl((y - 2012) * 12)}" y="${Hl - 5}">${y}</text>`;
+  l += `<path d="${aq.map((v, i) => `${i ? 'L' : 'M'}${xl(i).toFixed(1)},${yl(v).toFixed(1)}`).join('')}" fill="none" stroke="#eee" stroke-width="1.4" stroke-dasharray="4 3"/>`;
+  l += `<path d="${lm.map((v, i) => `${i ? 'L' : 'M'}${xl(i).toFixed(1)},${yl(v).toFixed(1)}`).join('')}" fill="none" stroke="#3987e5" stroke-width="1.8"/></svg>`;
+  return `<div class="chips">${ALGS.map(a => `<label><input type="checkbox" data-cmp="${a.k}" ${HS.cmpOn.has(a.k) ? 'checked' : ''}><span class="sw" style="background:${a.c}"></span>${a.n}</label>`).join('')}</div>
+    <h3>مجموع أيام الحريق السنوي حسب الخوارزمية</h3><div class="hchart">${s}</div>
+    <h3>تقييم حقيقي لهذه المنطقة: الخطأ الشهري عند إخفاء Aqua</h3>${tbl}
+    <h3>سنوات مخفية 2012–2021: Aqua الفعلي (متقطع) مقابل ${{ ensemble_geom: 'المزيج + الهندسة', ensemble: 'المزيج', frp_season: 'منحنى FRP', ratio_month: 'النسبة الشهرية', ratio: 'النسبة الثابتة' }[ek] || ek}</h3><div class="hchart">${l}</div>${btbl}`;
+}
+let LIVE = null;
+function renderLive() {
+  const bb = curBBox(); LIVE = liveCells(bb); updateCellOverlay(LIVE);
+  const day = new Date(tMin * 1000), month = day.getUTCMonth();
+  const P = RG() ? RG().calib : H.global_calib, calName = RG() ? `معايرة ${RG().title}` : 'المعايرة العالمية (4 مناطق)';
+  const satRows = SATS.map((s, i) => ({ s, i, r: LIVE.rows[i] || 0, c: LIVE.per[i] ? LIVE.per[i].size : 0 })).filter(x => x.r > 0);
+  const aq = LIVE.per[SAT_I.A] ? LIVE.per[SAT_I.A].size : 0;
+  const conv = ['N', 'N20', 'N21'].map(code => ({ code, name: SATS[SAT_I[code]].name, r: convert(P, LIVE.per[SAT_I[code]], month) })).filter(x => x.r);
+  const algs = [['ensemble', 'المزيج'], ['frp_season', 'منحنى FRP'], ['ratio_month', 'نسبة شهرية'], ['ratio', 'نسبة ثابتة']];
+  return `<div class="note">كل الحسابات هنا تجري الآن في المتصفح على سجلات ${D.window[0]} الحقيقية داخل المستطيل. ${HS.cells ? 'المربعات على الكرة = خلايا أيام الحريق (2 كم): برتقالي MODIS وحده، أزرق VIIRS وحده، أبيض كلاهما.' : ''}</div>
+    <label class="chk"><input type="checkbox" id="hCells" ${HS.cells ? 'checked' : ''}> اعرض خلايا أيام الحريق على الكرة</label>
+    <table class="ht"><tr><th>القمر</th><th class="n">أسطر FIRMS</th><th class="n">أيام حريق</th><th class="n">سطر لكل خلية</th></tr>
+    ${satRows.map(x => `<tr><td><span style="color:${SYS[x.s.system].col}">${x.s.symbol}</span> ${x.s.name}</td><td class="n">${fmtN(x.r)}</td><td class="n">${x.s.system <= 1 ? fmtN(x.c) : '–'}</td><td class="n">${x.c ? fmtN(x.r / x.c, 2) : '–'}</td></tr>`).join('') || '<tr><td colspan="4" class="hint">لا رصدات في هذا المستطيل اليوم.</td></tr>'}</table>
+    <h3>تحويل VIIRS إلى مكافئ Aqua (${calName}، شهر ${MONF[month]})</h3>
+    ${conv.length ? `<table class="ht"><tr><th>المرجع</th><th class="n">خلايا VIIRS</th>${algs.map(([, n]) => `<th class="n">${n}</th>`).join('')}</tr>
+      ${conv.map(c => `<tr><td>${c.name}</td><td class="n">${fmtN(c.r.cells)}</td>${algs.map(([k]) => `<td class="n">${fmtN(c.r[k], 1)}</td>`).join('')}</tr>`).join('')}
+      <tr><td><b>Aqua الفعلي</b></td><td class="n">–</td><td class="n" colspan="${algs.length}" style="text-align:center"><b>${fmtN(aq)}</b> يوم حريق</td></tr></table>
+      <div class="hint">يوم واحد فيه عشوائية كبيرة (غيوم، توقيت)، والخطأ المقيس ~10% يخص المجموع الشهري. Aqua في ${day.getUTCFullYear()} يمر حوالي 15:15 لا 13:30، فرقمه الفعلي ليس "الحقيقة" بعد 2022.</div>` : '<div class="hint">لا رصدات VIIRS في المستطيل.</div>'}`;
+}
+function renderDl() {
+  return `<div class="row"><button id="dlHot">CSV: رصدات اليوم داخل المستطيل</button></div>
+    <div class="row"><button id="dlCal" ${RG() ? '' : 'disabled'}>CSV: التقويم الشهري (كل الخوارزميات، الفترة المختارة)</button></div>
+    <div class="row"><button id="dlPng" ${RG() ? '' : 'disabled'}>PNG: صورة التقويم</button></div>
+    <div class="row"><button id="dlSum" ${RG() ? '' : 'disabled'}>JSON: ملخص التحليل والتقييم</button></div>
+    <div class="row"><button id="dlBench">CSV: نتائج مقارنة كل الطرق</button></div>
+    <div class="hint" id="dlMsg"></div>`;
+}
+function renderHow() {
+  return `<ol class="hint" style="padding-inline-start:18px">
+    <li><b>تصفية:</b> ثقة MODIS ≥ 30، وحذف VIIRS منخفض الثقة، وحذف كل خلية ظهر فيها مصدر ثابت أو بركان (<code>type</code> 1–3).</li>
+    <li><b>أيام الحريق:</b> خلية 0.02° (~2 كم) × يوم شمسي محلي تُعدّ مرة واحدة، فيختفي تكرار البكسلات والمرورات والأقمار.</li>
+    <li><b>سلسلة مرجعية:</b> Terra محوّل (حتى يونيو 2002) ← Aqua (حتى 2021) ← S-NPP محوّل إلى مكافئ Aqua (من 2022، لأن مدار Aqua انجرف).</li>
+    <li><b>التحويل (المزيج):</b> متوسط [نسبة Aqua÷S-NPP لكل شهر] و [Σ احتمال أن يرى Aqua كل خلية حسب FRP الذي قاسه VIIRS والموسم، بمنحنى متزايد (isotonic)، + نسبة ما يراه Aqua وحده].</li>
+    <li><b>تكيّفي:</b> المعايرة على 2012–2021 بوزن يتضاعف كل سنتين باتجاه الأحدث، لأن العلاقة بين المستشعرين تنجرف ببطء.</li>
+    <li><b>هندسة المدار (اختياري):</b> حجم بكسل Aqua متوقع من التاريخ (دورة 16 يوماً) وخط الطول بنسبة 99.3%، فيُستخدم منحنى FRP منفصل لكل حجم.</li>
+    <li><b>التقويم:</b> شهر × سنة، والشذوذ = القيمة ÷ وسيط (أو متوسط) نفس الشهر 2003–2022.</li>
+    <li><b>الدقة:</b> ~10% خطأ شهري في الاختبار للأمام، والحد الأدنى الممكن ~7% (بين جهازين متطابقين). الربط المباشر يخطئ 163–355%.</li></ol>`;
+}
+
+function hRender() {
+  const R = RG();
+  $h('hAlgInfo').textContent = ALG[HS.alg].d;
+  const body = $h('hBody');
+  body.innerHTML = { sum: renderSum, cal: renderCal, alg: renderAlg, live: renderLive, dl: renderDl, how: renderHow }[HS.tab]();
+  if (HS.tab !== 'live') updateCellOverlay(null);
+  drawBox(curBBox());
+  body.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { HS.calMode = b.dataset.cm; hRender(); });
+  if ($h('hBase')) { $h('hBase').value = HS.base; $h('hBase').onchange = e => { HS.base = e.target.value; hRender(); }; }
+  if ($h('hCmap')) { $h('hCmap').value = HS.cmap; $h('hCmap').onchange = e => { HS.cmap = e.target.value; hRender(); }; }
+  body.querySelectorAll('[data-cmp]').forEach(c => c.onchange = () => { c.checked ? HS.cmpOn.add(c.dataset.cmp) : HS.cmpOn.delete(c.dataset.cmp); hRender(); });
+  if ($h('hCells')) $h('hCells').onchange = e => { HS.cells = e.target.checked; hRender(); };
+  if (HS.tab === 'dl') wireDownloads();
+}
+
+// ---------- downloads ----------
+function save(name, text, type = 'text/csv') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); $h('dlMsg').textContent = 'حُفظ: ' + name; }
+function wireDownloads() {
+  const tag = (RG() ? HS.reg : 'area') + `_${HS.y0}-${String(HS.m0 + 1).padStart(2, '0')}_${HS.y1}-${String(HS.m1 + 1).padStart(2, '0')}`;
+  $h('dlHot').onclick = () => {
+    const [w, s, e, n] = curBBox(); const out = ['latitude,longitude,acq_datetime_utc,satellite,instrument,system,frp_mw,confidence,scan_km,track_km,daynight'];
+    for (let i = 0; i < N; i++) { const la = C.lat[i], lo = C.lon[i]; if (la < s || la > n || lo < w || lo > e) continue; const sat = SATS[C.sat[i]];
+      out.push([la, lo, new Date(C.t[i] * 1000).toISOString(), sat.name, sat.instrument, SYS[sat.system].name.split(' ')[0], C.frp[i] ?? '', ['low', 'nominal', 'high'][C.conf[i]], C.scan[i], C.track[i], C.dn[i] ? 'N' : 'D'].join(',')); }
+    save(`hotspots_${D.window[0]}_${curBBox().map(v => v.toFixed(2)).join('_')}.csv`, out.join('\n'));
+  };
+  $h('dlBench').onclick = () => { const B = H.benchmark; if (!B) return; const out = ['method,test,' + B.order.join(',')];
+    B.rows.forEach(r => { if (r.loyo) out.push([`"${r.name}"`, 'held_out_year', ...B.order.map(g => r.loyo[g])].join(',')); if (r.fw) out.push([`"${r.name}"`, 'forward_2018_2021', ...B.order.map(g => r.fw[g])].join(',')); });
+    save('benchmark_all_methods.csv', out.join('\n')); };
+  if (!RG()) return;
+  const R = RG(), ms = rangeMonths(R.NM), base = baseline(R.series[HS.alg]);
+  $h('dlCal').onclick = () => {
+    const keys = ALGS.map(a => a.k); const out = ['year,month,source,' + keys.join(',') + `,baseline_${HS.base}_2003_2022(${HS.alg}),anomaly_pct(${HS.alg})`];
+    ms.forEach(m => { const v = R.series[HS.alg][m], b = base[m % 12]; out.push([HY0 + Math.floor(m / 12), m % 12 + 1, R.src[m], ...keys.map(k => R.series[k][m]), b.toFixed(1), b > 0 ? ((v / b - 1) * 100).toFixed(1) : ''].join(',')); });
+    save(`fire_calendar_${tag}.csv`, out.join('\n'));
+  };
+  $h('dlPng').onclick = () => {
+    const prev = HS.tab; HS.tab = 'cal'; const html = renderCal(); HS.tab = prev;
+    const svgTxt = html.slice(html.indexOf('<svg'), html.indexOf('</svg>') + 6).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ').replace(/<text /g, '<text font-family="sans-serif" font-size="10" fill="#bbb" ');
+    const img = new Image(); img.onload = () => { const cv = document.createElement('canvas'); cv.width = img.width * 2; cv.height = img.height * 2; const g = cv.getContext('2d'); g.scale(2, 2); g.drawImage(img, 0, 0);
+      cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `fire_calendar_${tag}.png`; a.click(); $h('dlMsg').textContent = 'حُفظ: صورة التقويم'; }); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgTxt);
+  };
+  $h('dlSum').onclick = () => {
+    const arr = R.series[HS.alg];
+    save(`summary_${tag}.json`, JSON.stringify({ region: R.title, bbox: R.bbox, algorithm: HS.alg, range: [`${HS.y0}-${HS.m0 + 1}`, `${HS.y1}-${HS.m1 + 1}`], baseline: HS.base,
+      months: ms.map(m => ({ ym: `${HY0 + Math.floor(m / 12)}-${String(m % 12 + 1).padStart(2, '0')}`, value: arr[m], baseline: +base[m % 12].toFixed(1), anomaly_pct: base[m % 12] > 0 ? +((arr[m] / base[m % 12] - 1) * 100).toFixed(1) : null, source: R.src[m] })),
+      evaluation: R.eval && Object.fromEntries(Object.entries(R.eval).map(([k, v]) => [k, { loyo: v.loyo, forward: v.forward, forward_adaptive: v.forward_adaptive }])), calibration: R.calib }, null, 1), 'application/json');
+  };
+}
+
+// ---------- controls ----------
+(() => {
+  const rs = $h('hReg'); rs.innerHTML = REGK.map(k => `<option value="${k}">${H.regions[k].title}</option>`).join('') + '<option value="custom">منطقة مرسومة / مخصّصة</option>';
+  rs.value = HS.reg;
+  const yrs = []; for (let y = 2001; y <= 2026; y++) yrs.push(y);
+  [['hY0', HS.y0], ['hY1', HS.y1]].forEach(([id, v]) => { $h(id).innerHTML = yrs.map(y => `<option>${y}</option>`).join(''); $h(id).value = v; });
+  [['hM0', HS.m0], ['hM1', HS.m1]].forEach(([id, v]) => { $h(id).innerHTML = MON.map((m, i) => `<option value="${i}">${m}</option>`).join(''); $h(id).value = v; });
+  $h('hAlg').innerHTML = ALGS.map(a => `<option value="${a.k}">${a.n}</option>`).join(''); $h('hAlg').value = HS.alg;
+  const syncBox = () => { const bb = curBBox(); ['hW', 'hS', 'hE', 'hN'].forEach((id, i) => $h(id).value = bb[i].toFixed(2)); };
+  rs.onchange = () => { HS.reg = rs.value; if (HS.reg !== 'custom') HS.bbox = null; else if (!HS.bbox) HS.bbox = [...(H.regions[REGK[0]]?.bbox || [-10, 30, 10, 40])]; syncBox(); hRender(); };
+  ['hY0', 'hY1', 'hM0', 'hM1'].forEach(id => $h(id).onchange = () => { HS.y0 = +$h('hY0').value; HS.y1 = +$h('hY1').value; HS.m0 = +$h('hM0').value; HS.m1 = +$h('hM1').value;
+    if (mIdx(HS.y1, HS.m1) < mIdx(HS.y0, HS.m0)) { HS.y1 = HS.y0; HS.m1 = HS.m0; $h('hY1').value = HS.y1; $h('hM1').value = HS.m1; } hRender(); });
+  $h('hAlg').onchange = e => { HS.alg = e.target.value; HS.cmpOn.add(HS.alg); hRender(); };
+  $h('hApply').onclick = () => { const v = ['hW', 'hS', 'hE', 'hN'].map(id => +$h(id).value); if (v[0] < v[2] && v[1] < v[3]) { HS.bbox = v; HS.reg = 'custom'; rs.value = 'custom'; hRender(); } };
+  $h('hGo').onclick = () => { const [w, s, e, n] = curBBox(); const span = Math.max(e - w, n - s); opt.follow = -1; followSel.value = -1; flyTo = ll2v((s + n) / 2, (w + e) / 2, 1 + Math.min(2, Math.max(0.02, span / 60))); };
+  $h('hDraw').onclick = () => { HS.drawing = 1; HS.p1 = null; $h('hDraw').classList.add('on'); $h('hDraw').textContent = 'انقر الزاوية الأولى…'; };
+  window.harmClick = P => {
+    if (!HS.drawing) return false;
+    const la = Math.asin(P.y) / DEG, lo = Math.atan2(P.z, -P.x) / DEG - 180, lon = ((lo + 540) % 360) - 180;
+    if (HS.drawing === 1) { HS.p1 = [lon, la]; HS.drawing = 2; $h('hDraw').textContent = 'انقر الزاوية المقابلة…'; return true; }
+    const bb = [Math.min(HS.p1[0], lon), Math.min(HS.p1[1], la), Math.max(HS.p1[0], lon), Math.max(HS.p1[1], la)];
+    HS.drawing = 0; $h('hDraw').classList.remove('on'); $h('hDraw').textContent = 'ارسم على الكرة';
+    // a drawn box that sits inside a calibrated region keeps that region's archive; otherwise it is custom
+    const inside = REGK.find(k => { const b = H.regions[k].bbox; return bb[0] >= b[0] - 0.01 && bb[1] >= b[1] - 0.01 && bb[2] <= b[2] + 0.01 && bb[3] <= b[3] + 0.01; });
+    HS.bbox = bb; HS.reg = 'custom'; rs.value = 'custom'; syncBox(); HS.tab = 'live'; document.querySelectorAll('#hTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'live')); hRender();
+    if (inside) $h('hBody').insertAdjacentHTML('afterbegin', `<div class="note">المستطيل داخل منطقة «${H.regions[inside].title}» المحسوبة. اخترها من القائمة لرؤية تقويمها.</div>`);
+    return true;
+  };
+  document.querySelectorAll('#hTabs button').forEach(b => b.onclick = () => { HS.tab = b.dataset.t; document.querySelectorAll('#hTabs button').forEach(x => x.classList.toggle('on', x === b)); hRender(); });
+  syncBox(); hRender();
+})();
+
+window.sim = { select, setTime, camera, ll2v, HS, hRender }; // console helpers: sim.select(recordIndex)
+document.getElementById('loading').remove();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

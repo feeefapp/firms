@@ -1,0 +1,125 @@
+.fm-chat {
+  display: grid;
+  gap: var(--lab-space-4);
+  min-width: 0;
+}
+.fm-chat-list {
+  display: grid;
+  gap: var(--lab-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fm-chat-msg {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 0;
+}
+.fm-chat-msg[data-role='user'] {
+  justify-items: end;
+}
+.fm-chat-bubble {
+  max-width: min(100%, 44rem);
+  padding: 10px 14px;
+  border-radius: calc(18px * var(--lab-corner-scale, 1));
+  corner-shape: superellipse(1.5);
+  background: color-mix(in srgb, var(--lab-ink) 5%, var(--lab-surface));
+  color: var(--lab-ink);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fm-chat-msg[data-role='user'] .fm-chat-bubble {
+  background: color-mix(in srgb, var(--lab-primary) 14%, var(--lab-surface));
+}
+.fm-chat-steps {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--lab-muted);
+  max-width: 100%;
+}
+.fm-chat-steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fm-chat-steps li[data-state='failed'] {
+  color: var(--lab-danger);
+}
+.fm-chat-steps code {
+  font: 12px/1.4 var(--lab-mono, ui-monospace, monospace);
+  color: var(--lab-ink);
+}
+.fm-chat-step-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fm-chat-thinking,
+.fm-chat-applied {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--lab-muted);
+}
+.fm-chat-applied {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lab-success) 12%, transparent);
+  color: var(--lab-ink);
+  flex-wrap: wrap;
+}
+.fm-chat-applied > svg:last-child {
+  color: var(--lab-success);
+}
+.fm-chat-intro {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: var(--lab-space-6, 32px) var(--lab-space-2);
+  text-align: center;
+  color: var(--lab-muted);
+}
+.fm-chat-intro > svg {
+  color: var(--lab-primary);
+}
+.fm-chat-intro h2 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--lab-ink);
+}
+.fm-chat-intro p {
+  max-width: 34rem;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.fm-chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+.fm-chat-composer {
+  position: sticky;
+  bottom: 0;
+}
+.fm-chat-footer {
+  margin: 4px 8px 0;
+  font-size: 12px;
+  color: var(--lab-muted);
+}
+.fm-chat-page {
+  width: 100%;
+  max-width: 820px;
+  margin-inline: auto;
+}

@@ -1,0 +1,188 @@
+//! Firms server: SPA host, JSON API, MCP endpoint and AI agent (see docs/ARCHITECTURE.md).
+
+mod agent;
+mod api;
+mod auth;
+mod config;
+mod data;
+mod db;
+mod error;
+mod firms;
+mod jobs;
+mod live;
+mod mcp;
+mod state;
+mod tools;
+mod web;
+
+use std::path::Path;
+use std::time::Duration;
+
+use axum::http::{HeaderValue, header};
+use axum::routing::get;
+use axum::{Json, Router};
+use serde_json::json;
+use tower_http::compression::CompressionLayer;
+use tower_http::set_header::SetResponseHeaderLayer;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::EnvFilter;
+
+use crate::config::Config;
+use crate::state::AppState;
+
+fn load_env() {
+    if let Ok(p) = std::env::var("FIRMS_ENV_FILE") {
+        let _ = dotenvy::from_path(p);
+        return;
+    }
+    for p in [".env", "../.env"] {
+        if Path::new(p).exists() {
+            let _ = dotenvy::from_path(p);
+            break;
+        }
+    }
+}
+
+/// Copy seed files (regions/*.json, benchmark.json, day/*) into the data dir when missing.
+fn seed(from: &Path, to: &Path) -> std::io::Result<usize> {
+    let mut n = 0;
+    for sub in ["regions", "day"] {
+        let src = from.join(sub);
+        let Ok(rd) = std::fs::read_dir(&src) else { continue };
+        std::fs::create_dir_all(to.join(sub))?;
+        for e in rd.flatten() {
+            let p = e.path();
+            if !p.is_file() {
+                continue;
+            }
+            let dst = to.join(sub).join(e.file_name());
+            if !dst.exists() {
+                let tmp = dst.with_extension("seeding");
+                std::fs::copy(&p, &tmp)?;
+                std::fs::rename(&tmp, &dst)?;
+                n += 1;
+            }
+        }
+    }
+    let b = from.join("benchmark.json");
+    let dst = to.join("benchmark.json");
+    if b.is_file() && !dst.exists() {
+        std::fs::copy(&b, &dst)?;
+        n += 1;
+    }
+    Ok(n)
+}
+
+fn session_key(cfg: &Config) -> std::io::Result<Vec<u8>> {
+    if let Some(k) = &cfg.session_key {
+        if k.len() >= 32 {
+            return Ok(k.clone());
+        }
+        tracing::warn!("FIRMS_SESSION_KEY is shorter than 32 bytes; using a generated key instead");
+    }
+    let path = cfg.data_dir.join("session.key");
+    if let Ok(s) = std::fs::read_to_string(&path) {
+        if let Ok(k) = hex::decode(s.trim()) {
+            if k.len() >= 32 {
+                return Ok(k);
+            }
+        }
+    }
+    let mut k = vec![0u8; 32];
+    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut k);
+    std::fs::write(&path, hex::encode(&k))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(k)
+}
+
+async fn healthz(axum::extract::State(st): axum::extract::State<AppState>) -> Json<serde_json::Value> {
+    let r = st.regions();
+    Json(json!({
+        "ok": true,
+        "version": env!("CARGO_PKG_VERSION"),
+        "regions": r.list.len(),
+        "global_calibration": r.global_kind,
+        "days": st.days.available(),
+        "firms_key": st.cfg.map_key.is_some(),
+        "oauth": !st.cfg.client_id.is_empty(),
+    }))
+}
+
+pub fn app(st: AppState) -> Router {
+    Router::new()
+        .route("/healthz", get(healthz))
+        .merge(auth::routes())
+        .merge(api::routes())
+        .merge(mcp::routes())
+        .fallback(web::serve)
+        .with_state(st)
+        .layer(CompressionLayer::new())
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
+        .layer(TraceLayer::new_for_http())
+}
+
+async fn shutdown() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let term = async {
+        if let Ok(mut s) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            s.recv().await;
+        }
+    };
+    #[cfg(not(unix))]
+    let term = std::future::pending::<()>();
+    tokio::select! { () = ctrl_c => {}, () = term => {} }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    load_env();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_env("FIRMS_LOG").unwrap_or_else(|_| EnvFilter::new("info,tower_http=warn")),
+        )
+        .init();
+    let cfg = Config::from_env();
+    tracing::info!(config = ?cfg, "starting");
+    for sub in ["regions", "day", "cache", "raw"] {
+        std::fs::create_dir_all(cfg.data_dir.join(sub))?;
+    }
+    if let Some(seed_dir) = &cfg.seed_dir {
+        match seed(seed_dir, &cfg.data_dir) {
+            Ok(n) => tracing::info!(files = n, "seeded data dir"),
+            Err(e) => tracing::warn!(%e, "seeding failed"),
+        }
+    }
+    let key = session_key(&cfg)?;
+    let db = db::Db::open(&cfg.data_dir.join("firms.db"))?;
+    let bind = cfg.bind.clone();
+    let st = AppState::new(cfg, db, key);
+    {
+        let r = st.regions();
+        tracing::info!(count = r.list.len(), global = r.global_kind, "regions loaded");
+    }
+    let st2 = st.clone();
+    tokio::spawn(async move {
+        loop {
+            let _ = st2.db.prune_sessions();
+            tokio::time::sleep(Duration::from_secs(6 * 3600)).await;
+        }
+    });
+    let listener = tokio::net::TcpListener::bind(&bind).await?;
+    tracing::info!(%bind, "listening");
+    axum::serve(listener, app(st)).with_graceful_shutdown(shutdown()).await?;
+    Ok(())
+}

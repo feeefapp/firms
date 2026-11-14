@@ -1,0 +1,208 @@
+/*
+ * Firms workspace on the kit Scaffold. The kit owns the ground, sidebar, rail, drawer, content
+ * panel and floating bars; this file only lays out the app's own pieces on --lab-* tokens.
+ */
+.fm-host {
+  height: min(100dvh, var(--lab-viewport-height, 100dvh));
+  min-height: 0;
+  overflow: hidden;
+}
+.fm-host > .fm-scaffold {
+  height: 100%;
+}
+
+/* Reading column inside the panel; the scroll area pads the edges with G. */
+.fm-page {
+  display: grid;
+  gap: var(--lab-space-4);
+  width: 100%;
+  max-width: 1200px;
+  min-width: 0;
+  margin-inline: auto;
+  padding-bottom: var(--lab-space-4);
+}
+
+/* App bar: [navigation] [the page's bar] … [tools]. When a page's parameters don't fit beside
+   the tools, they take their own row under them (rows fold, they don't squeeze). */
+.fm-app-bar-host {
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+}
+.fm-top-slot {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-toolbar-gap);
+  min-width: 0;
+}
+.fm-top-slot:empty {
+  display: none;
+}
+/* A page bar with parameters takes the room between the navigation and the tools, so its
+   segmented controls unfold whenever they fit. */
+.fm-app-bar > .lab-workspace-app-title:has(.fm-params) {
+  flex: 1 1 auto;
+}
+@container (max-width: 760px) {
+  .fm-app-bar:has(.fm-params) {
+    flex-wrap: wrap;
+  }
+  .fm-app-bar:has(.fm-params) > .lab-workspace-app-title {
+    order: 3;
+    flex: 1 0 100%;
+    overflow: visible;
+  }
+}
+.fm-bar-title {
+  padding-inline: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fm-params {
+  max-width: 100%;
+  min-width: 0;
+}
+.fm-params-region {
+  flex: 0 1 13rem;
+  min-width: 6.5rem;
+}
+
+/* Bottom dock: the assistant and the page's actions in one row. */
+.fm-dock-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-toolbar-gap, 8px);
+  min-width: 0;
+}
+.fm-dock-slot {
+  display: contents;
+}
+/* Phones: the assistant keeps its icon (and its accessible name); page actions keep their words. */
+@media (max-width: 520px) {
+  .fm-dock-ask .lab-control-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Full-bleed pages (the globe): content fills the panel; the bars float over it. */
+.fm-bleed {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.fm-bleed-content {
+  position: absolute;
+  inset: 0;
+}
+.fm-bleed-top,
+.fm-bleed-bottom {
+  position: absolute;
+  inset-inline: var(--lab-toolbar-inset, 8px);
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.fm-bleed-top {
+  top: var(--lab-shell-gap, 8px);
+}
+.fm-bleed-bottom {
+  bottom: var(--lab-shell-gap, 8px);
+}
+.fm-bleed-top > *,
+.fm-bleed-bottom > * {
+  pointer-events: auto;
+}
+.fm-bleed-top > * {
+  width: 100%;
+}
+
+/* Sidebar. */
+.fm-side-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lab-shell-gap, 8px);
+  min-height: var(--lab-toolbar-item, 44px);
+}
+.fm-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 10px;
+  color: var(--lab-ink);
+  font: 600 17px/1 var(--lab-font);
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.fm-brand > svg {
+  color: var(--lab-primary);
+}
+.fm-navigation {
+  display: grid;
+  gap: 4px;
+}
+.fm-side-foot {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--lab-muted);
+}
+
+/* Account identity inside a toolbar is content, never another painted tile. */
+.fm-account-glyph {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  font-weight: 500;
+}
+.fm-account-photo {
+  inline-size: var(--lab-icon-size, 20px);
+  block-size: var(--lab-icon-size, 20px);
+  object-fit: cover;
+  border-radius: 50%;
+}
+.lab-account-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+/* Advanced sheet. */
+.fm-advanced {
+  display: grid;
+  gap: var(--lab-space-5, 24px);
+}
+.fm-alg-label,
+.fm-cmap-label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.fm-alg-error {
+  font-variant-numeric: tabular-nums;
+  color: var(--lab-ink);
+}
+.fm-ramp {
+  display: inline-block;
+  width: 72px;
+  height: 10px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+[dir='rtl'] .fm-ramp {
+  transform: scaleX(-1);
+}
