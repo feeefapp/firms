@@ -1,0 +1,1 @@
+import{as as o,j as r,az as c}from"./index-WfE_LsEK.js";function l({label:s,content:t,children:n,className:a}){const{t:e}=o();return r.jsx(c,{label:s??e("lab.presentation.actions"),content:t,className:a,children:n})}export{l as P};

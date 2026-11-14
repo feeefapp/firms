@@ -12,26 +12,26 @@
 # The full Node image ships git, which npm needs for the github: dependency.
 FROM node:22-bookworm AS web
 WORKDIR /web
-COPY web/package.json web/package-lock.json ./
-# The lockfile resolves @feeef.dev/ui to git+ssh://git@github.com/feeefapp/ui; build hosts have no
-# SSH key, so git rewrites GitHub SSH URLs to HTTPS (with the token when given) for this command
-# only, through GIT_CONFIG_* variables.
+COPY web/ ./
+# With the `gh_token` build secret (a GitHub token that can read the private feeefapp/ui kit) the SPA is
+# built from source. Without it, the committed bundle in web/prebuilt is used, so a deploy never blocks
+# on the secret. Refresh web/prebuilt with `npm run build && rm -rf prebuilt && cp -r dist prebuilt`.
+# The lockfile resolves @feeef.dev/ui to git+ssh://git@github.com/feeefapp/ui; git rewrites GitHub SSH
+# URLs to HTTPS with the token for this command only, through GIT_CONFIG_* variables.
 RUN --mount=type=cache,target=/root/.npm \
     --mount=type=secret,id=gh_token,required=false \
     set -eu; \
-    https="https://github.com/"; \
     if [ -s /run/secrets/gh_token ]; then \
       https="https://x-access-token:$(cat /run/secrets/gh_token)@github.com/"; \
       export GIT_CONFIG_COUNT=3 \
+        GIT_CONFIG_KEY_0="url.${https}.insteadOf" GIT_CONFIG_VALUE_0="ssh://git@github.com/" \
+        GIT_CONFIG_KEY_1="url.${https}.insteadOf" GIT_CONFIG_VALUE_1="git@github.com:" \
         GIT_CONFIG_KEY_2="url.${https}.insteadOf" GIT_CONFIG_VALUE_2="https://github.com/"; \
+      npm ci --no-audit --no-fund && npm run build; \
     else \
-      export GIT_CONFIG_COUNT=2; \
-    fi; \
-    export GIT_CONFIG_KEY_0="url.${https}.insteadOf" GIT_CONFIG_VALUE_0="ssh://git@github.com/" \
-      GIT_CONFIG_KEY_1="url.${https}.insteadOf" GIT_CONFIG_VALUE_1="git@github.com:"; \
-    npm ci --no-audit --no-fund
-COPY web/ ./
-RUN npm run build
+      echo "gh_token build secret not set: using the committed web/prebuilt bundle"; \
+      test -f prebuilt/index.html; rm -rf dist; cp -r prebuilt dist; \
+    fi
 
 # --- Rust server -------------------------------------------------------------
 FROM rust:1-slim-bookworm AS build

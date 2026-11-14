@@ -1,0 +1,1 @@
+function a(n){if(!n)return null;const r=n.split(",").map(t=>Number(t.trim()));return r.length!==4||r.some(t=>!Number.isFinite(t))||r[0]>=r[2]||r[1]>=r[3]||Math.abs(r[0])>180||Math.abs(r[2])>180||Math.abs(r[1])>90||Math.abs(r[3])>90?null:r}export{a as p};
