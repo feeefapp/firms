@@ -38,6 +38,7 @@ FROM rust:1-slim-bookworm AS build
 WORKDIR /src
 COPY server/Cargo.toml server/Cargo.lock ./
 COPY server/src ./src
+COPY server/assets ./assets
 # Limits parallel rustc processes (and peak memory) on small build hosts.
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
