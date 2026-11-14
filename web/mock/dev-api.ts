@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
+import { agentMock } from './agent-mock'
 
 type Json = Record<string, unknown>
 type RegionFile = {
@@ -296,6 +297,12 @@ export function firmsMock(dataDir: string): Plugin {
     steps.forEach((step, i) => setTimeout(step, 250 * (i + 1)))
   }
 
+  const agent2 = agentMock({
+    regions: () => sorted().map((r) => ({ name: r.name, title: r.title, title_en: r.title_en ?? EN[r.name] ?? r.name, bbox: r.bbox, nm: r.NM })),
+    calendar: (name, q) => calendar(regions.get(name)!, new URLSearchParams(q)),
+    hotspots: (q) => hotspots(new URLSearchParams(q)),
+  })
+
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://localhost')
     const p = url.pathname
@@ -403,6 +410,10 @@ export function firmsMock(dataDir: string): Plugin {
         res.writeHead(204)
         res.end()
         return true
+      }
+      if (p.startsWith('/api/ai/') || p.startsWith('/api/agent/') || p.startsWith('/api/mcp/')) {
+        if (needAuth()) return true
+        return agent2.handle(req, res, p, q, readBody, json)
       }
       if (p === '/api/agent' && req.method === 'POST') {
         if (needAuth()) return true

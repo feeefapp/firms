@@ -1,0 +1,1 @@
+import{ai as o,j as r,as as c}from"./index-TMaF2MBw.js";function l({label:s,content:t,children:n,className:a}){const{t:e}=o();return r.jsx(c,{label:s??e("lab.presentation.actions"),content:t,className:a,children:n})}export{l as P};

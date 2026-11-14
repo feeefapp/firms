@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firms hotspots</title>
+<style>
+:root{--fg:#18181b;--muted:#71717a;--line:#e4e4e7;--soft:#f6f6f7;--grid:#d4d4d8;--tip:#18181b;--tip-fg:#fafafa;--box:#52525b}
+:root[data-theme="dark"]{--fg:#f4f4f5;--muted:#a1a1aa;--line:#2e2e33;--soft:#18181b;--grid:#3f3f46;--tip:#f4f4f5;--tip-fg:#18181b;--box:#a1a1aa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fg:#f4f4f5;--muted:#a1a1aa;--line:#2e2e33;--soft:#18181b;--grid:#3f3f46;--tip:#f4f4f5;--tip-fg:#18181b;--box:#a1a1aa}}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent;color:var(--fg);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Tahoma,"Noto Sans Arabic",sans-serif}
+#app{padding:12px 14px 14px}
+h1{font-size:15px;margin:0;font-weight:650}
+.sub{color:var(--muted);font-size:12px;margin-bottom:8px}
+svg{display:block;width:100%;height:auto;direction:ltr;background:var(--soft);border:1px solid var(--line);border-radius:12px;touch-action:manipulation}
+.gl{stroke:var(--grid);stroke-width:1;vector-effect:non-scaling-stroke}
+.gt{fill:var(--muted);font-size:10px}
+.bb{fill:none;stroke:var(--box);stroke-dasharray:4 3;vector-effect:non-scaling-stroke}
+circle{stroke:rgba(0,0,0,.35);stroke-width:.6;vector-effect:non-scaling-stroke;fill-opacity:.8;cursor:pointer}
+circle:hover{stroke:var(--fg);stroke-width:1.6}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:50%;display:inline-block}
+.foot{color:var(--muted);font-size:11px;margin-top:6px}
+#tip{position:fixed;pointer-events:none;background:var(--tip);color:var(--tip-fg);font-size:12px;padding:6px 8px;border-radius:8px;z-index:9;display:none;max-width:240px;line-height:1.4}
+.empty{color:var(--muted);padding:24px 0;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"><div class="empty" id="status">Loading…</div></div>
+<div id="tip" role="tooltip"></div>
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  var SATS = {
+    N: ["#e15759", "S-NPP (VIIRS)", "S-NPP"], N20: ["#f28e2b", "NOAA-20 (VIIRS)", "NOAA-20"], N21: ["#edc948", "NOAA-21 (VIIRS)", "NOAA-21"],
+    A: ["#4e79a7", "Aqua (MODIS)", "أكوا"], T: ["#76b7b2", "Terra (MODIS)", "تيرا"], L8: ["#b07aa1", "Landsat 8", "لاندسات 8"], L9: ["#ff9da7", "Landsat 9", "لاندسات 9"]
+  };
+  var state = { data: null, locale: navigator.language || "en" };
+  var app = document.getElementById("app"), tip = document.getElementById("tip");
+  function isAr() { return /^ar/i.test(state.locale); }
+  function T(en, ar) { return isAr() ? ar : en; }
+  function nf(v, d) { if (v == null || isNaN(v)) return "—"; try { return new Intl.NumberFormat(state.locale, { maximumFractionDigits: d == null ? 0 : d }).format(v); } catch (e) { return String(v); } }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function sv(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function satColor(s) { return (SATS[s] || ["#9c755f"])[0]; }
+  function satName(s) { var x = SATS[s]; return x ? (isAr() ? x[2] : x[1]) : s; }
+  function deg(v, pos, neg) { var a = Math.abs(v); return (Math.round(a * 100) / 100) + "°" + (v >= 0 ? pos : neg); }
+
+  function applyContext(ctx) {
+    if (!ctx) return;
+    if (ctx.theme === "dark" || ctx.theme === "light") document.documentElement.setAttribute("data-theme", ctx.theme);
+    if (ctx.locale) state.locale = ctx.locale;
+    document.documentElement.lang = state.locale;
+    document.documentElement.dir = isAr() ? "rtl" : "ltr";
+    if (state.data) render(state.data);
+  }
+  function showTip(ev, lines) {
+    tip.textContent = "";
+    lines.forEach(function (l, i) { var d = el("div", null, l); if (i === 0) d.style.fontWeight = "650"; tip.appendChild(d); });
+    tip.style.display = "block";
+    var r = tip.getBoundingClientRect(), x = ev.clientX + 12, y = ev.clientY + 12;
+    if (x + r.width > window.innerWidth - 4) x = Math.max(4, ev.clientX - r.width - 12);
+    if (y + r.height > window.innerHeight - 4) y = Math.max(4, ev.clientY - r.height - 12);
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  function hideTip() { tip.style.display = "none"; }
+  function niceStep(span) {
+    var steps = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 15, 20, 30, 45, 60];
+    for (var i = 0; i < steps.length; i++) if (span / steps[i] <= 7) return steps[i];
+    return 90;
+  }
+
+  function render(d) {
+    state.data = d;
+    document.documentElement.dir = isAr() ? "rtl" : "ltr";
+    app.textContent = "";
+    var rows = (d && Array.isArray(d.rows)) ? d.rows : [];
+    var bb = d && Array.isArray(d.bbox) && d.bbox.length === 4 ? d.bbox.map(Number) : null;
+    if (!bb) {
+      if (!rows.length) { app.appendChild(el("div", "empty", T("No detections.", "لا توجد رصدات."))); return; }
+      bb = [180, 90, -180, -90];
+      rows.forEach(function (r) { bb[0] = Math.min(bb[0], r.longitude); bb[1] = Math.min(bb[1], r.latitude); bb[2] = Math.max(bb[2], r.longitude); bb[3] = Math.max(bb[3], r.latitude); });
+    }
+    app.appendChild(el("h1", null, T("FIRMS detections", "رصدات FIRMS")));
+    var days = d.days || 1;
+    app.appendChild(el("div", "sub", (d.date || "") + (days > 1 ? " +" + (days - 1) + T(" days", " أيام") : "") + " · " +
+      nf(d.count != null ? d.count : rows.length) + T(" detections", " رصدة") + (d.truncated ? " · " + T("showing ", "المعروض ") + nf(rows.length) : "")));
+
+    var w = bb[2] - bb[0], h = bb[3] - bb[1];
+    var pad = Math.max(w, h) * 0.04 + 0.01;
+    var W = bb[0] - pad, E = bb[2] + pad, S = bb[1] - pad, N = bb[3] + pad;
+    var k = Math.max(0.2, Math.cos(((S + N) / 2) * Math.PI / 180)); // equirectangular with a standard parallel
+    var vw = Math.max(280, Math.round(app.clientWidth - 28) || 640);
+    var vh = Math.round(Math.max(220, Math.min(vw * (N - S) / ((E - W) * k), Math.max(260, (window.innerHeight || 700) * 0.7), 560)));
+    var s = Math.min(vw / ((E - W) * k), vh / (N - S)); // one scale for both axes (no distortion)
+    var ox = (vw - (E - W) * k * s) / 2, oy = (vh - (N - S) * s) / 2;
+    function X(lon) { return ox + (lon - W) * k * s; }
+    function Y(lat) { return oy + (N - lat) * s; }
+    var W0 = W - ox / (k * s), E0 = E + ox / (k * s), S0 = S - oy / s, N0 = N + oy / s;
+    var svg = sv("svg", { viewBox: "0 0 " + vw + " " + vh, role: "img", "aria-label": T("Map of detections", "خريطة الرصدات") });
+    var stepLon = niceStep(E0 - W0), stepLat = niceStep(N0 - S0), g = sv("g", {});
+    for (var lon = Math.ceil(W0 / stepLon) * stepLon; lon <= E0; lon += stepLon) {
+      g.appendChild(sv("line", { x1: X(lon), x2: X(lon), y1: 0, y2: vh, "class": "gl" }));
+      var t = sv("text", { x: X(lon) + 3, y: vh - 4, "class": "gt" }); t.textContent = deg(lon, "E", "W"); g.appendChild(t);
+    }
+    for (var lat = Math.ceil(S0 / stepLat) * stepLat; lat <= N0; lat += stepLat) {
+      g.appendChild(sv("line", { x1: 0, x2: vw, y1: Y(lat), y2: Y(lat), "class": "gl" }));
+      var t2 = sv("text", { x: 4, y: Y(lat) - 3, "class": "gt" }); t2.textContent = deg(lat, "N", "S"); g.appendChild(t2);
+    }
+    svg.appendChild(g);
+    svg.appendChild(sv("rect", { x: X(bb[0]), y: Y(bb[3]), width: X(bb[2]) - X(bb[0]), height: Y(bb[1]) - Y(bb[3]), "class": "bb" }));
+    var counts = {};
+    var sorted = rows.slice().sort(function (a, b) { return (a.frp || 0) - (b.frp || 0); });
+    var pts = sv("g", {});
+    sorted.forEach(function (r) {
+      counts[r.satellite] = (counts[r.satellite] || 0) + 1;
+      var rad = Math.min(10, 3 + Math.sqrt(Math.max(0, r.frp || 0)) / 2);
+      var c = sv("circle", { cx: X(r.longitude).toFixed(1), cy: Y(r.latitude).toFixed(1), r: rad.toFixed(2), fill: satColor(r.satellite) });
+      var t = String(r.acq_time || "").padStart(4, "0");
+      var lines = [satName(r.satellite), (r.acq_date || "") + " " + t.slice(0, 2) + ":" + t.slice(2) + " UTC" + (r.daynight ? " · " + (r.daynight === "D" ? T("day", "نهار") : T("night", "ليل")) : ""),
+        "FRP: " + (r.frp == null ? "—" : nf(r.frp, 1) + " MW"),
+        T("Confidence: ", "الثقة: ") + (["low", "nominal", "high"][r.confidence] || r.confidence_raw || "—"),
+        deg(r.latitude, "N", "S") + ", " + deg(r.longitude, "E", "W")];
+      c.addEventListener("mousemove", function (e) { showTip(e, lines); });
+      c.addEventListener("mouseleave", hideTip);
+      c.addEventListener("click", function (e) { showTip(e, lines); });
+      pts.appendChild(c);
+    });
+    svg.appendChild(pts);
+    app.appendChild(svg);
+
+    var lg = el("div", "legend"), total = d.by_satellite || counts;
+    Object.keys(total).sort().forEach(function (s) {
+      var span = el("span"), sw = el("i", "sw"); sw.style.background = satColor(s);
+      span.appendChild(sw); span.appendChild(document.createTextNode(satName(s) + " · " + nf(total[s]))); lg.appendChild(span);
+    });
+    if (!rows.length) lg.appendChild(el("span", null, T("No detections in this box.", "لا توجد رصدات في هذا المربع.")));
+    app.appendChild(lg);
+    app.appendChild(el("div", "foot", T("Circle size ∝ √FRP · dashed box = search area · equirectangular projection",
+      "حجم الدائرة ∝ جذر القدرة الإشعاعية · المربع المتقطع = منطقة البحث · إسقاط متساوي المسافات")));
+    reportSize();
+  }
+
+  function extract(p) {
+    if (!p) return null;
+    if (p.structuredContent && (p.structuredContent.rows || p.structuredContent.bbox)) return p.structuredContent;
+    if (p.rows) return p;
+    var content = p.content || [];
+    for (var i = 0; i < content.length; i++) {
+      if (content[i] && content[i].type === "text") { try { var j = JSON.parse(content[i].text); if (j && j.rows) return j; } catch (e) { /* not JSON */ } }
+    }
+    return null;
+  }
+
+  var nextId = 1, pending = {};
+  function post(msg) { try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, "*"); } catch (e) { /* ignore */ } }
+  function request(method, params) {
+    var id = nextId++;
+    post({ jsonrpc: "2.0", id: id, method: method, params: params || {} });
+    return new Promise(function (resolve) { pending[id] = resolve; setTimeout(function () { if (pending[id]) { delete pending[id]; resolve(null); } }, 4000); });
+  }
+  function notify(method, params) { post({ jsonrpc: "2.0", method: method, params: params || {} }); }
+  var lastH = 0;
+  function reportSize() {
+    var h = Math.ceil(document.documentElement.scrollHeight);
+    if (Math.abs(h - lastH) < 2) return; lastH = h;
+    notify("ui/notifications/size-changed", { width: Math.ceil(document.documentElement.scrollWidth), height: h });
+  }
+  window.addEventListener("message", function (ev) {
+    var m = ev.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.id != null && !m.method && pending[m.id]) { var r = pending[m.id]; delete pending[m.id]; r(m.result || null); return; }
+    switch (m.method) {
+      case "ui/notifications/tool-result": { var d = extract(m.params); if (d) render(d); break; }
+      case "ui/notifications/tool-input": if (!state.data) { var st = document.getElementById("status"); if (st) st.textContent = T("Searching detections…", "جارٍ البحث…"); } break;
+      case "ui/notifications/host-context-changed": applyContext(m.params); break;
+      case "ui/resource-teardown": case "ping": if (m.id != null) post({ jsonrpc: "2.0", id: m.id, result: {} }); break;
+    }
+  });
+  var lastW = 0;
+  if (window.ResizeObserver) new ResizeObserver(function () {
+    var w = app.clientWidth;
+    if (state.data && Math.abs(w - lastW) > 24) { lastW = w; render(state.data); } else reportSize();
+  }).observe(document.documentElement);
+  request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "firms-hotspots", version: "1.0.0" }, appCapabilities: {} })
+    .then(function (res) { if (res && res.hostContext) applyContext(res.hostContext); notify("ui/notifications/initialized", {}); });
+  function fromOpenAI(g) {
+    g = g || window.openai || {};
+    if (g.theme || g.locale) applyContext({ theme: g.theme, locale: g.locale });
+    var d = extract(g.toolOutput);
+    if (d) render(d);
+  }
+  if (window.openai) fromOpenAI();
+  window.addEventListener("openai:set_globals", function (e) { fromOpenAI((e.detail && e.detail.globals) || window.openai); });
+  window.__firmsRender = render;
+})();
+</script>
+</body>
+</html>

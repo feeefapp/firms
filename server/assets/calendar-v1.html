@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firms calendar</title>
+<style>
+:root{--bg:transparent;--fg:#18181b;--muted:#71717a;--line:#e4e4e7;--soft:#f4f4f5;--tip:#18181b;--tip-fg:#fafafa;--empty:#f0f0f2}
+:root[data-theme="dark"]{--fg:#f4f4f5;--muted:#a1a1aa;--line:#2e2e33;--soft:#1f1f23;--tip:#f4f4f5;--tip-fg:#18181b;--empty:#232328}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fg:#f4f4f5;--muted:#a1a1aa;--line:#2e2e33;--soft:#1f1f23;--tip:#f4f4f5;--tip-fg:#18181b;--empty:#232328}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Tahoma,"Noto Sans Arabic",sans-serif}
+#app{padding:12px 14px 14px}
+.head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px}
+h1{font-size:15px;margin:0;font-weight:650}
+.sub{color:var(--muted);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;background:var(--soft)}
+.seg button{font:inherit;font-size:12px;border:0;background:transparent;color:var(--muted);padding:3px 10px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg,#fff)}
+:root .seg button[aria-pressed="true"]{color:#fff}
+:root[data-theme="dark"] .seg button[aria-pressed="true"]{color:#18181b}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.chip{border:1px solid var(--line);border-radius:10px;padding:4px 8px;font-size:12px}
+.chip b{font-weight:650}
+.wrap{overflow-x:auto}
+.grid{display:grid;grid-template-columns:44px repeat(12,minmax(18px,1fr)) 64px;gap:2px;min-width:420px}
+.lab{color:var(--muted);font-size:11px;display:flex;align-items:center;justify-content:center;white-space:nowrap}
+.yr{justify-content:flex-start;font-variant-numeric:tabular-nums}
+.tot{justify-content:flex-end;font-variant-numeric:tabular-nums;color:var(--fg)}
+.tot.inc{color:var(--muted)}
+.cell{height:22px;border-radius:4px;background:var(--empty);outline:none;position:relative}
+.cell.partial{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 3px,transparent 3px 6px)}
+.cell:focus-visible,.cell:hover{box-shadow:0 0 0 2px var(--fg)}
+.legend{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--muted);font-size:11px}
+.bar{height:8px;flex:0 1 180px;border-radius:4px}
+.foot{color:var(--muted);font-size:11px;margin-top:6px}
+#tip{position:fixed;pointer-events:none;background:var(--tip);color:var(--tip-fg);font-size:12px;padding:6px 8px;border-radius:8px;z-index:9;max-width:240px;display:none;line-height:1.4}
+.empty{color:var(--muted);padding:24px 0;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"><div class="empty" id="status">Loading…</div></div>
+<div id="tip" role="tooltip"></div>
+<script>
+(function () {
+  "use strict";
+  var CIVIDIS = ["#00224e", "#123570", "#3b496c", "#575d6d", "#707173", "#8a8678", "#a59c74", "#c3b369", "#fee838"];
+  var state = { data: null, mode: "value", locale: (navigator.language || "en"), theme: null };
+  var app = document.getElementById("app");
+  var tip = document.getElementById("tip");
+
+  function hex(c) { return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]; }
+  function mix(stops, t) {
+    t = Math.max(0, Math.min(1, t));
+    var x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+    var a = hex(stops[i]), b = hex(stops[i + 1]);
+    return "rgb(" + a.map(function (v, k) { return Math.round(v + (b[k] - v) * f); }).join(",") + ")";
+  }
+  var DIVERGING = ["#2b5c8a", "#7fa6c6", "#e9e9ec", "#d9906b", "#a83a2a"];
+  function isAr() { return /^ar/i.test(state.locale); }
+  function T(en, ar) { return isAr() ? ar : en; }
+  function nf(v, d) {
+    if (v == null || isNaN(v)) return "—";
+    try { return new Intl.NumberFormat(state.locale, { maximumFractionDigits: d == null ? 0 : d }).format(v); } catch (e) { return String(Math.round(v)); }
+  }
+  function monthName(m) {
+    try { return new Intl.DateTimeFormat(state.locale, { month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2001, m, 1))); } catch (e) { return String(m + 1); }
+  }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function pct(v) { return v == null ? "—" : (v > 0 ? "+" : "") + nf(v) + "%"; }
+  var SRC = { T: ["Terra → Aqua", "تيرا ← أكوا"], A: ["Aqua", "أكوا"], V: ["VIIRS → Aqua", "VIIRS ← أكوا"] };
+
+  function applyContext(ctx) {
+    if (!ctx) return;
+    if (ctx.theme === "dark" || ctx.theme === "light") { state.theme = ctx.theme; document.documentElement.setAttribute("data-theme", ctx.theme); }
+    if (ctx.locale) state.locale = ctx.locale;
+    document.documentElement.lang = state.locale;
+    document.documentElement.dir = isAr() ? "rtl" : "ltr";
+    if (state.data) render(state.data);
+  }
+
+  function showTip(ev, lines) {
+    tip.textContent = "";
+    lines.forEach(function (l, i) { var d = el("div", null, l); if (i === 0) d.style.fontWeight = "650"; tip.appendChild(d); });
+    tip.style.display = "block";
+    var r = tip.getBoundingClientRect();
+    var x = (ev.clientX || 0) + 12, y = (ev.clientY || 0) + 12;
+    if (x + r.width > window.innerWidth - 4) x = Math.max(4, (ev.clientX || 0) - r.width - 12);
+    if (y + r.height > window.innerHeight - 4) y = Math.max(4, (ev.clientY || 0) - r.height - 12);
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  function hideTip() { tip.style.display = "none"; }
+
+  function render(d) {
+    state.data = d;
+    document.documentElement.dir = isAr() ? "rtl" : "ltr";
+    app.textContent = "";
+    if (!d || !Array.isArray(d.months) || !d.months.length) { app.appendChild(el("div", "empty", T("No calendar data.", "لا توجد بيانات."))); return; }
+    var head = el("div", "head"), left = el("div");
+    left.appendChild(el("h1", null, (isAr() ? (d.title || d.title_en) : (d.title_en || d.title)) || d.region));
+    left.appendChild(el("div", "sub", (d.algorithm || "") + " · " + d.from + " → " + d.to + " · " + T("fire-days (Aqua-equivalent)", "أيام حريق (مكافئ Aqua)")));
+    head.appendChild(left);
+    var seg = el("div", "seg");
+    [["value", T("Fire-days", "أيام الحريق")], ["anomaly", T("Anomaly", "الشذوذ")]].forEach(function (m) {
+      var b = el("button", null, m[1]); b.type = "button"; b.setAttribute("aria-pressed", String(state.mode === m[0]));
+      b.onclick = function () { state.mode = m[0]; render(state.data); }; seg.appendChild(b);
+    });
+    head.appendChild(seg);
+    app.appendChild(head);
+
+    var s = d.summary || {}, chips = el("div", "chips");
+    function chip(label, value) { var c = el("span", "chip"); c.appendChild(document.createTextNode(label + " ")); c.appendChild(el("b", null, value)); chips.appendChild(c); }
+    chip(T("Total", "المجموع"), nf(s.total));
+    if (s.peak) chip(T("Peak", "الذروة"), s.peak.ym + " · " + nf(s.peak.value));
+    if (s.latest) chip(T("Latest", "آخر شهر"), s.latest.ym + " · " + pct(s.latest.anomaly_pct) + (s.latest.rank ? " · #" + s.latest.rank + "/" + s.latest.of : ""));
+    if (d.error && d.error.pct != null) chip(T("Error", "الخطأ"), "≈" + nf(d.error.pct, 1) + "%");
+    app.appendChild(chips);
+
+    var byKey = {}, max = 0, years = {};
+    d.months.forEach(function (m) { byKey[m.ym] = m; if (m.value > max) max = m.value; years[m.ym.slice(0, 4)] = 1; });
+    var totals = {}; (d.years || []).forEach(function (y) { totals[y.year] = y; });
+    var ys = Object.keys(years).sort();
+    var wrap = el("div", "wrap"), grid = el("div", "grid");
+    grid.setAttribute("role", "grid");
+    grid.appendChild(el("div", "lab", ""));
+    for (var c = 0; c < 12; c++) grid.appendChild(el("div", "lab", monthName(c)));
+    grid.appendChild(el("div", "lab tot", T("Year", "السنة")));
+    ys.forEach(function (y) {
+      grid.appendChild(el("div", "lab yr", y));
+      for (var c = 0; c < 12; c++) {
+        var key = y + "-" + (c < 9 ? "0" : "") + (c + 1), m = byKey[key], cell = el("div", "cell");
+        if (m) {
+          var color = state.mode === "anomaly"
+            ? (m.anomaly_pct == null ? null : mix(DIVERGING, 0.5 + Math.max(-100, Math.min(100, m.anomaly_pct)) / 200))
+            : mix(CIVIDIS, max > 0 ? Math.sqrt(m.value / max) : 0);
+          if (color) cell.style.background = color;
+          if (m.partial) cell.classList.add("partial");
+          cell.tabIndex = 0;
+          var src = SRC[m.source] ? SRC[m.source][isAr() ? 1 : 0] : m.source;
+          var lines = [key + (m.partial ? " · " + T("in progress", "جارٍ") : ""),
+            T("Fire-days: ", "أيام الحريق: ") + nf(m.value),
+            T("Normal (", "المعتاد (") + (d.baseline_kind || "median") + " 2003–2022): " + nf(m.baseline),
+            T("Anomaly: ", "الشذوذ: ") + pct(m.anomaly_pct),
+            T("Source: ", "المصدر: ") + src];
+          cell.setAttribute("aria-label", lines.join(", "));
+          (function (lines) {
+            cell.addEventListener("mousemove", function (e) { showTip(e, lines); });
+            cell.addEventListener("mouseleave", hideTip);
+            cell.addEventListener("focus", function (e) { var r = e.target.getBoundingClientRect(); showTip({ clientX: r.right, clientY: r.bottom }, lines); });
+            cell.addEventListener("blur", hideTip);
+            cell.addEventListener("click", function (e) { showTip(e, lines); });
+          })(lines);
+        }
+        grid.appendChild(cell);
+      }
+      var t = totals[Number(y)];
+      grid.appendChild(el("div", "lab tot" + (t && !t.complete ? " inc" : ""), t ? nf(t.total) + (t.complete ? "" : "*") : ""));
+    });
+    wrap.appendChild(grid);
+    app.appendChild(wrap);
+
+    var lg = el("div", "legend"), bar = el("div", "bar");
+    if (state.mode === "anomaly") {
+      bar.style.background = "linear-gradient(to right," + DIVERGING.join(",") + ")";
+      lg.appendChild(el("span", null, "−100%")); lg.appendChild(bar); lg.appendChild(el("span", null, "+100%"));
+    } else {
+      bar.style.background = "linear-gradient(to right," + CIVIDIS.join(",") + ")";
+      lg.appendChild(el("span", null, "0")); lg.appendChild(bar); lg.appendChild(el("span", null, nf(max)));
+    }
+    if (isAr()) bar.style.transform = "scaleX(-1)";
+    app.appendChild(lg);
+    app.appendChild(el("div", "foot", T("* incomplete year · hatched = month in progress · values are fire-days, not raw detections",
+      "* سنة غير مكتملة · المخطط = شهر جارٍ · القيم أيام حريق وليست رصدات خام")));
+    reportSize();
+  }
+
+  // ---- data extraction (MCP Apps tool-result or ChatGPT toolOutput)
+  function extract(p) {
+    if (!p) return null;
+    if (p.structuredContent && p.structuredContent.months) return p.structuredContent;
+    if (p.months) return p;
+    var content = p.content || [];
+    for (var i = 0; i < content.length; i++) {
+      if (content[i] && content[i].type === "text") { try { var j = JSON.parse(content[i].text); if (j && j.months) return j; } catch (e) { /* not JSON */ } }
+    }
+    return null;
+  }
+
+  // ---- MCP Apps postMessage protocol
+  var nextId = 1, pending = {};
+  function post(msg) { try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, "*"); } catch (e) { /* ignore */ } }
+  function request(method, params) {
+    var id = nextId++;
+    post({ jsonrpc: "2.0", id: id, method: method, params: params || {} });
+    return new Promise(function (resolve) { pending[id] = resolve; setTimeout(function () { if (pending[id]) { delete pending[id]; resolve(null); } }, 4000); });
+  }
+  function notify(method, params) { post({ jsonrpc: "2.0", method: method, params: params || {} }); }
+  var lastH = 0;
+  function reportSize() {
+    var h = Math.ceil(document.documentElement.scrollHeight);
+    if (Math.abs(h - lastH) < 2) return; lastH = h;
+    notify("ui/notifications/size-changed", { width: Math.ceil(document.documentElement.scrollWidth), height: h });
+  }
+  window.addEventListener("message", function (ev) {
+    var m = ev.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.id != null && !m.method && pending[m.id]) { var r = pending[m.id]; delete pending[m.id]; r(m.result || null); return; }
+    switch (m.method) {
+      case "ui/notifications/tool-result": { var d = extract(m.params); if (d) render(d); break; }
+      case "ui/notifications/tool-input": if (!state.data) { var st = document.getElementById("status"); if (st) st.textContent = T("Building the calendar…", "جارٍ إعداد التقويم…"); } break;
+      case "ui/notifications/tool-cancelled": if (!state.data) app.textContent = ""; break;
+      case "ui/notifications/host-context-changed": applyContext(m.params); break;
+      case "ui/resource-teardown": case "ping": if (m.id != null) post({ jsonrpc: "2.0", id: m.id, result: {} }); break;
+    }
+  });
+  if (window.ResizeObserver) new ResizeObserver(reportSize).observe(document.documentElement);
+  request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "firms-calendar", version: "1.0.0" }, appCapabilities: {} })
+    .then(function (res) { if (res && res.hostContext) applyContext(res.hostContext); notify("ui/notifications/initialized", {}); });
+
+  // ---- ChatGPT Apps SDK
+  function fromOpenAI(g) {
+    g = g || window.openai || {};
+    if (g.theme) applyContext({ theme: g.theme, locale: g.locale });
+    else if (g.locale) applyContext({ locale: g.locale });
+    var d = extract(g.toolOutput);
+    if (d) render(d);
+  }
+  if (window.openai) fromOpenAI();
+  window.addEventListener("openai:set_globals", function (e) { fromOpenAI((e.detail && e.detail.globals) || window.openai); });
+  if (!window.openai && (!window.parent || window.parent === window)) { var s0 = document.getElementById("status"); if (s0) s0.textContent = "Waiting for data…"; }
+  window.__firmsRender = render;
+})();
+</script>
+</body>
+</html>

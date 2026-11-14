@@ -44,7 +44,7 @@ pub fn parse_ym(s: &str) -> AppResult<i64> {
     Ok((y - i64::from(Y0)) * 12 + m - 1)
 }
 
-fn round1(x: f64) -> f64 {
+pub fn round1(x: f64) -> f64 {
     (x * 10.0).round() / 10.0
 }
 
@@ -320,6 +320,12 @@ struct RegionFile {
     country: Option<String>,
     #[serde(default)]
     title_en: Option<String>,
+    #[serde(default)]
+    sensor_rows: Value,
+    #[serde(default)]
+    sensor_celldays: Value,
+    #[serde(default, rename = "kT")]
+    kt: Value,
 }
 
 #[derive(Debug, Clone)]
@@ -337,6 +343,9 @@ pub struct Region {
     pub eval_aqua: Vec<f64>,
     pub calib: Calib,
     pub calib_stats: Option<CalibStats>,
+    pub sensor_rows: Value,
+    pub sensor_celldays: Value,
+    pub kt: Value,
     pub path: PathBuf,
 }
 
@@ -379,6 +388,9 @@ impl Region {
             eval_aqua: f.eval_aqua,
             calib: f.calib,
             calib_stats: f.calib_stats,
+            sensor_rows: f.sensor_rows,
+            sensor_celldays: f.sensor_celldays,
+            kt: f.kt,
             name: f.name,
             path: path.to_owned(),
         })
@@ -426,11 +438,18 @@ impl Region {
         })
     }
 
+    /// Index of the latest complete month (the running month only has a few days of data).
+    pub fn latest_complete(&self) -> usize {
+        let last = self.nm.saturating_sub(1);
+        let cur = current_month();
+        if last >= cur { cur.saturating_sub(1).min(last) } else { last }
+    }
+
     pub fn contains(&self, bb: &[f64; 4]) -> bool {
         self.bbox[0] <= bb[0] && self.bbox[1] <= bb[1] && self.bbox[2] >= bb[2] && self.bbox[3] >= bb[3]
     }
 
-    fn series_of(&self, alg: &str) -> AppResult<&Vec<f64>> {
+    pub fn series_of(&self, alg: &str) -> AppResult<&Vec<f64>> {
         self.series
             .get(alg)
             .ok_or_else(|| AppError::bad(format!("algorithm {alg:?} has no series in region {}", self.name)))

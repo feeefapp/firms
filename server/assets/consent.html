@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Firms · ربط تطبيق</title>
+<style>
+:root{--bg:#f6f6f7;--card:#fff;--fg:#18181b;--muted:#71717a;--line:#e4e4e7;--soft:#f4f4f5;--accent:#18181b;--on-accent:#fff;--ok:#15803d;--no:#b91c1c}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0b0c;--card:#161618;--fg:#f4f4f5;--muted:#a1a1aa;--line:#27272a;--soft:#1f1f22;--accent:#f4f4f5;--on-accent:#18181b;--ok:#4ade80;--no:#f87171}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);
+  font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,Tahoma,"Noto Sans Arabic",sans-serif;padding:16px}
+main{width:100%;max-width:440px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px}
+.apps{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px}
+.logo{width:48px;height:48px;border-radius:14px;background:var(--soft);border:1px solid var(--line);display:grid;place-items:center;
+  font-weight:600;font-size:20px;overflow:hidden}
+.logo img{width:100%;height:100%;object-fit:cover}
+.dots{color:var(--muted);letter-spacing:2px}
+h1{font-size:19px;line-height:1.35;margin:0 0 4px;text-align:center}
+.sub{color:var(--muted);text-align:center;margin:0 0 4px;font-size:13px}
+.en{direction:ltr;text-align:left}
+.en.center{text-align:center}
+ul{list-style:none;margin:18px 0;padding:0;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+li{display:flex;gap:10px;padding:10px 12px;border-top:1px solid var(--line)}
+li:first-child{border-top:0}
+.mark{flex:none;width:20px;text-align:center;font-weight:700;color:var(--ok)}
+li.no .mark{color:var(--no)}
+li small{display:block;color:var(--muted);direction:ltr;text-align:left;font-size:12.5px}
+.who{font-size:12.5px;color:var(--muted);text-align:center;margin:0 0 16px}
+.actions{display:flex;gap:10px}
+button{flex:1;font:inherit;font-weight:600;padding:11px 14px;border-radius:12px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+button.allow{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--muted);outline-offset:2px}
+.btn-en{display:block;font-weight:400;font-size:12px;opacity:.75}
+code{font-size:12.5px;background:var(--soft);padding:1px 6px;border-radius:6px;direction:ltr;unicode-bidi:isolate}
+</style>
+</head>
+<body>
+<main>
+  <div class="apps" aria-hidden="true"><div class="logo">{{logo}}</div><span class="dots">• • •</span><div class="logo">🔥</div></div>
+  <h1><bdi>{{client_name}}</bdi> يطلب الوصول إلى Firms</h1>
+  <p class="sub en center"><bdi>{{client_name}}</bdi> wants to connect to Firms</p>
+  <p class="sub">سيعود إلى <code>{{redirect_host}}</code> · Returns to <code>{{redirect_host}}</code></p>
+  <ul>
+    <li><span class="mark">✓</span><div>قراءة تقويمات الحرائق والمناطق والإحصاءات والاتجاهات<small>Read fire calendars, regions, statistics and trends</small></div></li>
+    <li><span class="mark">✓</span><div>البحث في رصدات الحرائق المباشرة من NASA FIRMS<small>Search live NASA FIRMS fire detections</small></div></li>
+    <li><span class="mark">✓</span><div>بدء بناء منطقة جديدة باسمك (يطلب تأكيدك)<small>Start new region builds in your name (asks you to confirm)</small></div></li>
+    <li class="no"><span class="mark">✕</span><div>لا يستطيع استخدام محفظة الذكاء الاصطناعي في feeef ولا رؤية كلمة مرورك<small>Cannot spend your feeef AI wallet or see your password</small></div></li>
+  </ul>
+  <p class="who">مسجّل الدخول باسم <bdi>{{user_name}}</bdi> · يمكنك فصله في أي وقت من صفحة المطوّرين على {{origin_host}}<br>
+    <span class="en center" style="display:block">Signed in as <bdi>{{user_name}}</bdi> · disconnect any time from Developers</span></p>
+  <form method="post" action="/oauth/consent" class="actions">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <button class="allow" type="submit" name="decision" value="allow">سماح<span class="btn-en">Allow</span></button>
+    <button type="submit" name="decision" value="deny">رفض<span class="btn-en">Deny</span></button>
+  </form>
+</main>
+</body>
+</html>

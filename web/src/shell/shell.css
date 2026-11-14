@@ -206,3 +206,13 @@
 [dir='rtl'] .fm-ramp {
   transform: scaleX(-1);
 }
+/* The assistant's conversation bubble keeps its size; the parameters fold first. */
+.fm-host .fm-top-slot > .fm-chat-bar {
+  flex: none;
+}
+@container (max-width: 760px) {
+  .fm-host .fm-top-slot:has(> .fm-chat-bar) > .fm-params {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}

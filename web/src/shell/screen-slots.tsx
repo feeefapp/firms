@@ -32,3 +32,9 @@ export function ScreenTitle({ title, children }: { title: string; children?: Rea
     </ScreenTop>
   )
 }
+
+/**
+ * The shell's floating app bar, for a page that owns its scroll viewport (the assistant: the
+ * composer floats at the bottom of its own `ScrollArea`, the app bar at its top).
+ */
+export const ShellAppBarContext = createContext<ReactNode>(null)

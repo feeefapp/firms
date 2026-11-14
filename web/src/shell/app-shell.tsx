@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Flame, LogIn, LogOut, Sparkles } from 'lucide-react'
+import { Flame, LogIn, LogOut, Maximize2, SquarePen, Sparkles } from 'lucide-react'
 import { Button, IconButton } from '@feeef.dev/ui/primitives/button'
 import { SquareSlot } from '@feeef.dev/ui/primitives/square-slot'
 import { MenuSurface, useFloatingBoundary } from '@feeef.dev/ui/menu'
@@ -21,12 +21,14 @@ import {
   useScaffold,
   type ScaffoldSideMode,
 } from '@feeef.dev/ui/workspace/scaffold'
+import { useAssistant } from '@/app/assistant'
 import { useSession } from '@/app/session'
-import { Chat } from '@/components/chat/chat'
+import { ConversationList } from '@/components/chat/conversations'
+import { ChatBottom, ChatThread, useChatSurface } from '@/components/chat/thread'
 import { linkWithParams } from '@/lib/params'
 import { t } from '@/i18n/locale'
 import { isActive, navItems } from './navigation'
-import { ScreenHostsContext } from './screen-slots'
+import { ScreenHostsContext, ShellAppBarContext } from './screen-slots'
 import '@feeef.dev/ui/navigation/navigation-item.css'
 import '@feeef.dev/ui/account/profile-menu.css'
 import '@feeef.dev/ui/actions/actions.css'
@@ -51,8 +53,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const fullBleed = pathname === '/globe'
   const onAssistant = pathname === '/assistant'
   const current = navItems().find((item) => isActive(pathname, item))
+  const { appliedAt } = useAssistant()
 
-  useEffect(() => setChatOpen(false), [pathname])
+  // Leaving the page closes the sheet, unless the assistant itself moved the page (a view it
+  // applied): the conversation stays open beside what it changed.
+  useEffect(() => {
+    if (performance.now() - appliedAt.current > 1500) setChatOpen(false)
+  }, [pathname, appliedAt])
 
   const appBar = (
     <div className="fm-app-bar-host">
@@ -92,7 +99,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             appBar={appBar}
             bottom={onAssistant ? undefined : bottom}
             renderViewport={(chrome) =>
-              fullBleed ? (
+              onAssistant ? (
+                <ShellAppBarContext.Provider value={chrome.appBar}>
+                  <div className="fm-assistant-view">{children}</div>
+                </ShellAppBarContext.Provider>
+              ) : fullBleed ? (
                 <div className="fm-bleed">
                   <div className="fm-bleed-content">{children}</div>
                   <div className="fm-bleed-top">{chrome.appBar}</div>
@@ -108,20 +119,48 @@ export function AppShell({ children }: { children: ReactNode }) {
             {children}
           </Scaffold>
         </div>
-        <Sheet
-          open={chatOpen}
-          onOpenChange={(open) => (open ? undefined : setChatOpen(false))}
-          label={t('m.nav.assistant')}
-          title={t('m.nav.assistant')}
-          detents={['medium', 'large']}
-          regular="pane"
-          paneWidth={460}
-          source={chatButton}
-        >
-          <Chat compact />
-        </Sheet>
+        <AssistantSheet open={chatOpen} onClose={() => setChatOpen(false)} source={chatButton} />
       </ScreenHostsContext.Provider>
     </Tooltip.Provider>
+  )
+}
+
+/**
+ * The Dock's "Ask the assistant" sheet: the same thread and composer as the Assistant page (one
+ * conversation for the app), with the page's context sent on every turn.
+ */
+function AssistantSheet({ open, onClose, source }: { open: boolean; onClose: () => void; source: RefObject<HTMLButtonElement | null> }) {
+  const surface = useChatSurface()
+  const { newChat, busy, messages } = useAssistant()
+  const { user } = useSession()
+  const { search } = useLocation()
+  const navigate = useNavigate()
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(next) => (next ? undefined : onClose())}
+      label={t('m.nav.assistant')}
+      title={t('m.nav.assistant')}
+      detents={['medium', 'large']}
+      regular="pane"
+      paneWidth={480}
+      source={source}
+      trailing={
+        user ? (
+          <ToolbarGroup label={t('m.chat.actions')}>
+            <IconButton variant="ghost" appearance="toolbar" aria-label={t('m.chat.new')} title={t('m.chat.new')} disabled={busy || !messages.length} onClick={newChat}>
+              <SquarePen />
+            </IconButton>
+            <IconButton variant="ghost" appearance="toolbar" aria-label={t('m.chat.openPage')} title={t('m.chat.openPage')} onClick={() => navigate(linkWithParams('/assistant', new URLSearchParams(search)))}>
+              <Maximize2 />
+            </IconButton>
+          </ToolbarGroup>
+        ) : undefined
+      }
+      dock={<ChatBottom surface={surface} compact />}
+    >
+      <ChatThread surface={surface} compact />
+    </Sheet>
   )
 }
 
@@ -177,7 +216,27 @@ function Side() {
           />
         ))}
       </nav>
+      {!rail && pathname === '/assistant' ? <SideHistory /> : null}
     </ScaffoldSide>
+  )
+}
+
+/** Saved conversations under the destinations while the Assistant page is open (Lab's history). */
+function SideHistory() {
+  const { user } = useSession()
+  const { newChat, busy, messages } = useAssistant()
+  const state = useScaffold()
+  if (!user || state.compact) return null
+  return (
+    <section className="fm-side-history" aria-label={t('m.chat.history.title')}>
+      <div className="fm-side-history-head">
+        <span>{t('m.chat.history.title')}</span>
+        <IconButton variant="ghost" appearance="toolbar" aria-label={t('m.chat.new')} title={t('m.chat.new')} disabled={busy || !messages.length} onClick={newChat}>
+          <SquarePen />
+        </IconButton>
+      </div>
+      <ConversationList onOpened={() => state.setDrawerOpen(false)} />
+    </section>
   )
 }
 

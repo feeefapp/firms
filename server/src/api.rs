@@ -34,6 +34,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/keys", get(list_keys).post(create_key))
         .route("/api/keys/{id}", delete(delete_key))
         .route("/api/agent", post(agent::handler))
+        .route("/api/export/calendar.csv", get(export_calendar_csv))
         .route("/api/{*rest}", get(not_found).post(not_found).put(not_found).delete(not_found))
 }
 
@@ -96,6 +97,32 @@ async fn compare(State(st): State<AppState>, Query(m): Q) -> AppResult<Json<Valu
     let r = st.regions().get(q(&m, "region").ok_or_else(|| AppError::bad("region is required"))?)?;
     let algs = tools::parse_algs(q(&m, "algorithms"));
     Ok(Json(data::compare(&r, Some(q(&m, "from").unwrap_or("2001-01")), q(&m, "to"), &algs)?))
+}
+
+/// `GET /api/export/calendar.csv?region&from&to&algorithm&baseline&exp&sig` (signed by the
+/// `export_calendar_csv` tool, valid 1 hour).
+async fn export_calendar_csv(State(st): State<AppState>, Query(m): Q) -> AppResult<Response> {
+    let need = |k: &str| q(&m, k).ok_or_else(|| AppError::bad(format!("{k} is required")));
+    let (region, from, to, alg, base, exp, sig) =
+        (need("region")?, need("from")?, need("to")?, need("algorithm")?, need("baseline")?, need("exp")?, need("sig")?);
+    let exp_n: i64 = exp.parse().map_err(|_| AppError::bad("bad exp"))?;
+    if !tools::export_verify(&st, &tools::export_payload(region, from, to, alg, base, exp_n), sig) {
+        return Err(AppError::Forbidden("invalid signature".into()));
+    }
+    if exp_n < crate::db::now() {
+        return Err(AppError::Forbidden("this download link expired; ask for a new one".into()));
+    }
+    let r = st.regions().get(region)?;
+    let cal = data::calendar(&r, Some(from), Some(to), alg, BaselineKind::parse(Some(base))?)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_owned()),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"firms_{region}_{from}_{to}_{alg}.csv\"")),
+            (header::CACHE_CONTROL, "private, max-age=3600".to_owned()),
+        ],
+        crate::analytics::calendar_csv(&cal),
+    )
+        .into_response())
 }
 
 async fn benchmark(State(st): State<AppState>) -> AppResult<Response> {

@@ -1,16 +1,20 @@
 //! Firms server: SPA host, JSON API, MCP endpoint and AI agent (see docs/ARCHITECTURE.md).
 
 mod agent;
+mod analytics;
 mod api;
 mod auth;
+mod chat;
 mod config;
 mod data;
 mod db;
 mod error;
 mod firms;
+mod gazetteer;
 mod jobs;
 mod live;
 mod mcp;
+mod oauth;
 mod state;
 mod tools;
 mod web;
@@ -18,7 +22,10 @@ mod web;
 use std::path::Path;
 use std::time::Duration;
 
-use axum::http::{HeaderValue, header};
+use axum::extract::Request;
+use axum::http::{HeaderValue, Method, StatusCode, header};
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::json;
@@ -112,10 +119,37 @@ async fn healthz(axum::extract::State(st): axum::extract::State<AppState>) -> Js
     }))
 }
 
+/// CORS `*` for the MCP endpoint and the OAuth metadata / token / registration endpoints
+/// (docs/AGENT_MCP.md §2); answers preflights itself.
+async fn cors(req: Request, next: Next) -> Response {
+    let path = req.uri().path();
+    let open = path == "/mcp" || path.starts_with("/.well-known/") || matches!(path, "/oauth/token" | "/oauth/register" | "/oauth/revoke");
+    if !open {
+        return next.run(req).await;
+    }
+    let mut res = if req.method() == Method::OPTIONS {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        next.run(req).await
+    };
+    let h = res.headers_mut();
+    h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, DELETE, OPTIONS"));
+    h.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("Authorization, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID"),
+    );
+    h.insert(header::ACCESS_CONTROL_EXPOSE_HEADERS, HeaderValue::from_static("WWW-Authenticate, Mcp-Session-Id"));
+    h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("86400"));
+    res
+}
+
 pub fn app(st: AppState) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .merge(auth::routes())
+        .merge(oauth::routes())
+        .merge(chat::routes())
         .merge(api::routes())
         .merge(mcp::routes())
         .fallback(web::serve)
@@ -129,6 +163,7 @@ pub fn app(st: AppState) -> Router {
             header::REFERRER_POLICY,
             HeaderValue::from_static("strict-origin-when-cross-origin"),
         ))
+        .layer(axum::middleware::from_fn(cors))
         .layer(TraceLayer::new_for_http())
 }
 
@@ -178,6 +213,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         loop {
             let _ = st2.db.prune_sessions();
+            let _ = st2.db.prune_oauth();
             tokio::time::sleep(Duration::from_secs(6 * 3600)).await;
         }
     });

@@ -46,7 +46,7 @@ pub fn sha256_hex(s: &str) -> String {
     hex::encode(Sha256::digest(s.as_bytes()))
 }
 
-fn sign(key: &[u8], payload: &str) -> String {
+pub(crate) fn sign(key: &[u8], payload: &str) -> String {
     let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(key) else {
         return String::new();
     };
@@ -54,7 +54,7 @@ fn sign(key: &[u8], payload: &str) -> String {
     B64.encode(mac.finalize().into_bytes())
 }
 
-fn verify(key: &[u8], payload: &str, sig: &str) -> bool {
+pub(crate) fn verify(key: &[u8], payload: &str, sig: &str) -> bool {
     let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(key) else {
         return false;
     };
@@ -74,7 +74,7 @@ pub fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
         .map(|(_, v)| v.to_owned())
 }
 
-fn set_cookie(name: &str, value: &str, path: &str, max_age: i64, secure: bool) -> HeaderValue {
+pub(crate) fn set_cookie(name: &str, value: &str, path: &str, max_age: i64, secure: bool) -> HeaderValue {
     let s = format!(
         "{name}={value}; Path={path}; Max-Age={max_age}; HttpOnly; SameSite=Lax{}",
         if secure { "; Secure" } else { "" }
@@ -82,7 +82,7 @@ fn set_cookie(name: &str, value: &str, path: &str, max_age: i64, secure: bool) -
     HeaderValue::from_str(&s).unwrap_or_else(|_| HeaderValue::from_static(""))
 }
 
-fn origin_of(url: &str) -> Option<String> {
+pub(crate) fn origin_of(url: &str) -> Option<String> {
     let u = url::Url::parse(url).ok()?;
     let host = u.host_str()?.to_ascii_lowercase();
     let port = u.port().map(|p| format!(":{p}")).unwrap_or_default();
@@ -105,7 +105,7 @@ fn is_unsafe(m: &Method) -> bool {
     !matches!(*m, Method::GET | Method::HEAD | Method::OPTIONS)
 }
 
-fn safe_next(next: Option<&str>) -> String {
+pub(crate) fn safe_next(next: Option<&str>) -> String {
     match next {
         Some(n) if n.starts_with('/') && !n.starts_with("//") && !n.contains('\\') && n.len() < 512 => n.to_owned(),
         _ => "/".to_owned(),
@@ -113,7 +113,7 @@ fn safe_next(next: Option<&str>) -> String {
 }
 
 /// 302 Found with `Location` (axum's `Redirect::to` is a 303).
-fn redirect_with_cookies(to: &str, cookies: Vec<HeaderValue>) -> Response {
+pub(crate) fn redirect_with_cookies(to: &str, cookies: Vec<HeaderValue>) -> Response {
     let mut res = StatusCode::FOUND.into_response();
     if let Ok(v) = HeaderValue::from_str(to) {
         res.headers_mut().insert(header::LOCATION, v);
@@ -348,6 +348,8 @@ pub enum Source {
     Session,
     ApiKey,
     FeeefToken,
+    /// MCP OAuth access token issued by Firms (`firms_at_…`).
+    OAuth,
 }
 
 impl Source {
@@ -356,6 +358,7 @@ impl Source {
             Self::Session => "session",
             Self::ApiKey => "api_key",
             Self::FeeefToken => "feeef_token",
+            Self::OAuth => "oauth",
         }
     }
 }
@@ -388,6 +391,12 @@ fn bearer(headers: &HeaderMap) -> Option<String> {
 
 /// Resolve a bearer credential: personal API key or feeef access token.
 pub async fn principal_from_bearer(st: &AppState, tok: &str) -> AppResult<Principal> {
+    if tok.starts_with(crate::oauth::AT_PREFIX) {
+        return crate::oauth::principal(st, tok);
+    }
+    if tok.starts_with(crate::oauth::RT_PREFIX) {
+        return Err(AppError::Unauthorized);
+    }
     if tok.starts_with("firms_") {
         let uid = st.db.key_user(&sha256_hex(tok))?.ok_or(AppError::Unauthorized)?;
         let user = st.db.user(&uid)?.unwrap_or_else(|| json!({ "id": uid }));

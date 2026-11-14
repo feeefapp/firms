@@ -18,14 +18,25 @@ npm run build              # tsc --noEmit && vite build → dist/
 real API; the mock (`mock/dev-api.ts`) is a Vite middleware loaded only by `vite.config.ts` when
 `FIRMS_MOCK=1` and is never bundled. It mirrors the server's JSON shapes from
 `../data/regions/*.json`, `benchmark.json` and `day/*.js`, fakes sign-in with a cookie
-(`/auth/feeef/login` → signed in, `POST /auth/logout`), keys, region build jobs and a
-deterministic `/api/agent` SSE stream.
+(`/auth/feeef/login` → signed in, `POST /auth/logout`), keys, region build jobs, and the
+native agent (`mock/agent-mock.ts`): `/api/ai/catalog` (a 3-rung ladder), conversations,
+streamed turns in the AI SDK UI message stream v1 with reasoning, parallel tool calls, cards,
+a view apply and an approval (`build …`), resumable runs (a prompt containing "drop" cuts the
+first connection) and connected MCP apps. `FIRMS_MOCK_AI=0` serves `ai_available:false`.
 
 ## Shape
 
 - `src/app/`: `app.tsx` (Provider → routes, lazy pages), `session.tsx` (`/api/me`, regions,
-  algorithms), `assistant.tsx` (one chat thread for the app, SSE `/api/agent`, applies `apply`
-  events to the address), `page-boundary.tsx`.
+  algorithms), `assistant.tsx` (the agent state for the app: catalog and model choice per
+  person, server conversations, one streamed turn at a time with resume, approvals, views
+  applied to the address with Undo), `page-boundary.tsx`.
+- `src/components/chat/`: the thread, ported from feeef Lab's chat (`types`, `reduce` (chunk
+  folder), `api` (`readChunks`, endpoints of docs/AGENT_MCP.md §4), `message`, `activity`,
+  `tool-card`, `approval`, `markdown` (small safe parser, per-block direction),
+  `stick-to-bottom`), plus `cards` (`data-firms-card`: calendar, anomalies, trend, hotspots,
+  compare, ranking, each with "Open in Firms"), `composer` (kit `PromptComposer` + `ModelLadder`,
+  reasoning effort under the model), `conversations` and `thread`. The Assistant page owns its
+  scroll area (composer floating at the bottom); the Dock sheet shows the same chat.
 - `src/shell/`: `app-shell.tsx` (Scaffold: sidebar, floating app bar, bottom dock with the page's
   actions and the assistant), `screen-slots.tsx` (`ScreenTop`, `ScreenDock`, `ScreenTitle`
   portals), `params-bar.tsx` (Region · Period · View in one ToolbarGroup, custom month range),
@@ -33,7 +44,8 @@ deterministic `/api/agent` SSE stream.
   `entry-layout.tsx` (sign-in screen).
 - `src/pages/`: `overview.tsx` (KPIs, calendar heatmap, annual line, CSV/PNG), `compare.tsx`,
   `search.tsx` (FilterBar → `/api/hotspots`, paged table, CSV via `format=csv`), `assistant.tsx`,
-  `regions.tsx` (list + add-region job), `developers.tsx` (MCP URL, keys, examples), `login.tsx`,
+  `regions.tsx` (list + add-region job), `developers.tsx` (connect Claude/ChatGPT/Cursor/Claude
+Code with the MCP URL over OAuth, connected apps with Revoke, keys, examples), `login.tsx`,
   `globe/` (lazy chunk: `engine.ts` is the three.js + satellite.js port of
   `../reference/legacy-sim.html`, `globe-page.tsx` the controls, `panels.tsx` the pixel inspector
   and the `/api/live` box sheet).
@@ -42,14 +54,15 @@ deterministic `/api/agent` SSE stream.
 - `src/components/ui/`: app-level helpers in the lite pattern (Panel, Table, Stat, Tag, states,
   toast, confirm). Kit components are composed, never copied or repainted.
 - `src/lib/`: `api.ts` (typed calls + tolerant normalizers), `params.ts` (analysis parameters in
-  the URL), `format.ts`, `colors.ts`, `download.ts`, `sse.ts`.
+  the URL), `format.ts`, `colors.ts`, `download.ts`.
 
 ## Parameters in the address
 
 `?region=punjab&period=12m|5y|all|custom&from=YYYY-MM&to=YYYY-MM&view=count|anomaly&alg=…&baseline=median|mean&cmap=cividis|inferno|blues`
 (defaults are dropped). Search adds `bbox, date, days, sources, conf, frp`; the globe `date, bbox`;
-compare `algs`. The sidebar carries the shared keys between pages, and the assistant's `apply`
-events (`region, from, to, algorithm, baseline, view, bbox, page`) write the same keys.
+compare `algs`. The sidebar carries the shared keys between pages, and the assistant's
+`data-firms-view` (`region, from, to, algorithm, baseline, view, bbox, date, page`) writes the
+same keys (on the Assistant page itself it changes the parameters and stays there).
 
 ## Language and rules
 

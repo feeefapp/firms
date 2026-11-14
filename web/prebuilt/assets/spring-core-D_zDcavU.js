@@ -1,1 +1,0 @@
-function l(e,c,r,p=420,h=28){let{position:n,velocity:t}=e;const o=Math.max(0,Math.min(.04,r)),i=Math.max(1,Math.ceil(o/(1/120))),s=o/i;for(let a=0;a<i;a++)t+=((c-n)*p-t*h)*s,n+=t*s;return{position:n,velocity:t}}export{l as s};

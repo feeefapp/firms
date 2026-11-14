@@ -22,6 +22,8 @@ pub struct Config {
     pub session_key: Option<Vec<u8>>,
     /// Extra origins accepted by the CSRF check (e.g. the Vite dev server `http://localhost:5190`).
     pub extra_origins: Vec<String>,
+    /// Extra browser origins accepted on /mcp (FIRMS_MCP_ORIGINS).
+    pub mcp_origins: Vec<String>,
 }
 
 impl std::fmt::Debug for Config {
@@ -83,8 +85,35 @@ impl Config {
             extra_origins: var("FIRMS_EXTRA_ORIGINS")
                 .map(|v| v.split(',').map(|o| o.trim().trim_end_matches('/').to_ascii_lowercase()).filter(|o| !o.is_empty()).collect())
                 .unwrap_or_default(),
+            mcp_origins: var("FIRMS_MCP_ORIGINS")
+                .map(|v| v.split(',').map(|o| o.trim().trim_end_matches('/').to_ascii_lowercase()).filter(|o| !o.is_empty()).collect())
+                .unwrap_or_default(),
             public_origin,
             session_key,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn for_tests(data_dir: PathBuf) -> Self {
+        Self {
+            bind: "127.0.0.1:0".into(),
+            public_origin: "http://localhost:8787".into(),
+            api_url: "http://127.0.0.1:9/v1".into(),
+            accounts_url: "http://127.0.0.1:9".into(),
+            client_id: String::new(),
+            client_secret: String::new(),
+            redirect_uri: "http://localhost:8787/auth/feeef/callback".into(),
+            map_key: None,
+            data_dir,
+            seed_dir: None,
+            web_dir: PathBuf::from("/nonexistent"),
+            tools_dir: PathBuf::from("/nonexistent"),
+            python: "python3".into(),
+            ai_model: "openai/gpt-4.1-mini".into(),
+            ai_disabled: true,
+            session_key: None,
+            extra_origins: Vec::new(),
+            mcp_origins: Vec::new(),
         }
     }
 

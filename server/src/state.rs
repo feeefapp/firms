@@ -45,9 +45,38 @@ pub struct Inner {
     pub refresh_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Upstream FIRMS API calls in the current 10-minute window (quota guard).
     pub firms_calls: Mutex<(Instant, u32)>,
+    /// MCP 2025-11-25 SSE elicitation: request id -> (user id, answer channel).
+    pub mcp_pending: Mutex<HashMap<String, (String, tokio::sync::oneshot::Sender<Value>)>>,
+    /// CIMD client metadata documents (client_id URL -> fetched at, metadata), 1 hour.
+    pub cimd_cache: Mutex<HashMap<String, (Instant, Value)>>,
+    /// In-app agent runs (resumable event logs), kept 30 minutes after they end.
+    pub runs: Mutex<HashMap<String, Arc<crate::chat::Run>>>,
+    /// Client Idempotency-Key (scoped per user) -> run id.
+    pub run_keys: Mutex<HashMap<String, String>>,
+    /// AI catalog per user token hash, ~60 s.
+    pub catalog_cache: Mutex<HashMap<String, (Instant, Value)>>,
 }
 
 pub const FIRMS_CALLS_PER_10_MIN: u32 = 400;
+
+/// Poison-tolerant lock.
+pub fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(test)]
+pub fn test_state() -> AppState {
+    let dir = std::env::temp_dir().join(format!("firms-test-{}", crate::auth::random_token(6).replace(['-', '_'], "x")));
+    std::fs::create_dir_all(dir.join("regions")).expect("tmp");
+    let seed = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
+    for e in std::fs::read_dir(seed.join("regions")).expect("seed").flatten() {
+        let _ = std::fs::copy(e.path(), dir.join("regions").join(e.file_name()));
+    }
+    let _ = std::fs::copy(seed.join("benchmark.json"), dir.join("benchmark.json"));
+    let cfg = Config::for_tests(dir.clone());
+    let db = Db::open(std::path::Path::new(":memory:")).expect("db");
+    AppState::new(cfg, db, vec![7u8; 32])
+}
 
 impl AppState {
     pub fn new(cfg: Config, db: Db, session_key: Vec<u8>) -> Self {
@@ -69,7 +98,17 @@ impl AppState {
             token_cache: Mutex::new(HashMap::new()),
             refresh_locks: Mutex::new(HashMap::new()),
             firms_calls: Mutex::new((Instant::now(), 0)),
+            mcp_pending: Mutex::new(HashMap::new()),
+            cimd_cache: Mutex::new(HashMap::new()),
+            runs: Mutex::new(HashMap::new()),
+            run_keys: Mutex::new(HashMap::new()),
+            catalog_cache: Mutex::new(HashMap::new()),
         }))
+    }
+
+    /// A purpose-bound key derived from the session key (HMAC(session_key, purpose)).
+    pub fn key_for(&self, purpose: &str) -> Vec<u8> {
+        crate::tools::derive_key(&self.session_key, purpose)
     }
 
     pub fn regions(&self) -> Arc<Regions> {

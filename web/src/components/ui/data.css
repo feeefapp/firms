@@ -424,3 +424,28 @@ html[data-lab-motion='none'] .fm-skeleton {
     display: none;
   }
 }
+.fm-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-inline-start: 22px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--lab-ink);
+}
+.fm-app-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.fm-app-cell img {
+  border-radius: 5px;
+}
+.fm-app-cell > span {
+  display: grid;
+  min-width: 0;
+}
+.fm-app-cell small {
+  color: var(--lab-muted);
+}
