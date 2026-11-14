@@ -1,0 +1,78 @@
+/* MCP consent screen: layout only, on --lab-* tokens (kit components keep their own look). */
+.fm-consent { justify-items: stretch; }
+.fm-consent-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lab-space-3, 12px);
+}
+.fm-consent-avatar {
+  display: grid;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  overflow: hidden;
+  border: 1px solid var(--lab-line);
+  border-radius: var(--lab-radius-group);
+  background: var(--lab-surface-soft);
+  color: var(--lab-ink);
+  font: 600 20px/1 var(--lab-font);
+}
+.fm-consent-avatar img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.fm-consent-firms { color: var(--lab-primary); }
+.fm-consent-link { color: var(--lab-muted); }
+.fm-consent h1 { text-align: center; text-wrap: balance; }
+.fm-consent > p { text-align: center; }
+.fm-consent-account {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-3, 12px);
+  padding: var(--lab-space-2, 8px) var(--lab-space-3, 12px);
+  border-radius: var(--lab-radius-group);
+  background: var(--lab-surface-soft);
+}
+.fm-consent-account img,
+.fm-consent-dot {
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.fm-consent-dot {
+  display: grid;
+  place-items: center;
+  background: var(--lab-surface);
+  color: var(--lab-ink);
+  font: 600 14px/1 var(--lab-font);
+}
+.fm-consent-account div { display: grid; min-width: 0; }
+.fm-consent-account bdi { color: var(--lab-ink); overflow-wrap: anywhere; }
+.fm-consent-muted { font-size: 12px; color: var(--lab-muted); }
+.fm-consent-list {
+  display: grid;
+  gap: var(--lab-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fm-consent-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lab-space-3, 12px);
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--lab-ink);
+}
+.fm-consent-list svg { flex: none; margin-block-start: 2px; color: var(--lab-primary); }
+.fm-consent-list .fm-consent-not { color: var(--lab-muted); }
+.fm-consent-list .fm-consent-not svg { color: var(--lab-muted); }
+.fm-consent-fine {
+  display: flex;
+  gap: var(--lab-space-2, 8px);
+  font-size: 12px !important;
+  line-height: 18px !important;
+  text-align: start !important;
+}
+.fm-consent-fine svg { flex: none; margin-block-start: 1px; color: var(--lab-muted); }
+.fm-consent-actions { display: grid; gap: var(--lab-space-2, 8px); }

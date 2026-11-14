@@ -46,6 +46,7 @@ pub fn routes() -> Router<AppState> {
         .route("/oauth/register", post(register))
         .route("/oauth/authorize", get(authorize))
         .route("/oauth/consent", get(consent_page).post(consent_submit))
+        .route("/oauth/consent.json", get(consent_info))
         .route("/oauth/token", post(token))
         .route("/oauth/revoke", post(revoke))
         .route("/api/mcp/grants", get(list_grants))
@@ -526,7 +527,41 @@ fn csrf_token(st: &AppState, az: &AzRequest, user_id: &str) -> String {
     auth::sign(&st.key_for("mcp-consent"), &format!("{}|{}|{}", az.nonce, az.client_id, user_id))
 }
 
+/// Data for the in-app consent screen (the SPA route `/oauth/consent`, built on feeef UI).
+/// Lives under `/oauth` because the authorization-request cookie is scoped to that path.
+async fn consent_info(State(st): State<AppState>, MaybeUser(user): MaybeUser, headers: HeaderMap) -> Response {
+    let Some(az) = az_from_cookie(&st, &headers) else {
+        return (StatusCode::GONE, Json(json!({ "error": "expired" }))).into_response();
+    };
+    let Some(user) = user else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "login", "login": "/auth/feeef/login?next=/oauth/consent" }))).into_response();
+    };
+    let meta = match client_meta(&st, &az.client_id).await {
+        Ok(m) => m,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "unknown_client", "detail": e }))).into_response(),
+    };
+    let client_site = if az.client_id.starts_with("https://") { redirect_host(&az.client_id) } else { String::new() };
+    Json(json!({
+        "client_name": meta["client_name"].as_str().unwrap_or("MCP client"),
+        "logo_uri": meta["logo_uri"].as_str().filter(|u| u.starts_with("https://")),
+        "client_site": client_site,
+        "redirect_host": redirect_host(&az.redirect_uri),
+        "origin_host": redirect_host(&st.cfg.public_origin),
+        "user": { "name": user.user["name"].as_str().or(user.user["email"].as_str()), "email": user.user["email"].as_str(), "photo": user.user["photoUrl"].as_str() },
+        "csrf": csrf_token(&st, &az, &user.user_id),
+        "scopes": [SCOPE],
+    }))
+    .into_response()
+}
+
 async fn consent_page(State(st): State<AppState>, MaybeUser(user): MaybeUser, headers: HeaderMap) -> Response {
+    // The feeef-UI consent screen ships with the SPA; the server-rendered page stays as a fallback.
+    let index = st.cfg.web_dir.join("index.html");
+    if let Ok(html) = tokio::fs::read_to_string(&index).await {
+        let mut res = (StatusCode::OK, axum::response::Html(html)).into_response();
+        res.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        return res;
+    }
     let Some(az) = az_from_cookie(&st, &headers) else {
         return error_page(
             "انتهت صلاحية طلب الربط. ارجع إلى التطبيق وأعد الاتصال.",
@@ -561,27 +596,55 @@ async fn consent_page(State(st): State<AppState>, MaybeUser(user): MaybeUser, he
     page(StatusCode::OK, html)
 }
 
+/// Consent decision. A form POST (server-rendered fallback) gets a 303 to the client; a JSON POST from the
+/// feeef-UI consent screen gets `{redirect}` so the page can navigate itself.
 async fn consent_submit(State(st): State<AppState>, MaybeUser(user): MaybeUser, headers: HeaderMap, body: axum::body::Bytes) -> Response {
-    let form: HashMap<String, String> = url::form_urlencoded::parse(&body).into_owned().collect();
+    let json_mode = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("application/json"));
+    let form: HashMap<String, String> = if json_mode {
+        serde_json::from_slice::<HashMap<String, Value>>(&body)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(k, v)| v.as_str().map(|s| (k, s.to_owned())))
+            .collect()
+    } else {
+        url::form_urlencoded::parse(&body).into_owned().collect()
+    };
+    let fail = |status: StatusCode, code: &str, ar: &str, en: &str| -> Response {
+        if json_mode {
+            (status, Json(json!({ "error": code }))).into_response()
+        } else {
+            error_page(ar, en, code)
+        }
+    };
     let Some(az) = az_from_cookie(&st, &headers) else {
-        return error_page("انتهت صلاحية طلب الربط.", "This connection request expired.", "authorization request missing or expired");
+        return fail(StatusCode::GONE, "expired", "انتهت صلاحية طلب الربط.", "This connection request expired.");
     };
     let Some(user) = user else {
+        if json_mode {
+            return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "login", "login": "/auth/feeef/login?next=/oauth/consent" }))).into_response();
+        }
         return auth::redirect_with_cookies("/auth/feeef/login?next=/oauth/consent", vec![]);
     };
     if !auth::same_origin(&st, &headers) || form.get("csrf").map(String::as_str) != Some(csrf_token(&st, &az, &user.user_id).as_str()) {
-        return error_page("تعذّر التحقق من الطلب.", "The request could not be verified.", "csrf");
+        return fail(StatusCode::FORBIDDEN, "csrf", "تعذّر التحقق من الطلب.", "The request could not be verified.");
     }
     let clear = auth::set_cookie(AZ_COOKIE, "", "/oauth", 0, st.cfg.secure_cookies());
     let issuer = st.cfg.public_origin.clone();
     let mut u = match url::Url::parse(&az.redirect_uri) {
         Ok(u) => u,
-        Err(_) => return error_page("عنوان رجوع غير صالح", "Invalid redirect URI", ""),
+        Err(_) => return fail(StatusCode::BAD_REQUEST, "invalid_redirect", "عنوان رجوع غير صالح", "Invalid redirect URI"),
     };
     if form.get("decision").map(String::as_str) != Some("allow") {
         let mut r = redirect_error(&az.redirect_uri, az.state.as_deref(), &issuer, "access_denied", "the user denied access");
+        if json_mode {
+            let to = r.headers().get(header::LOCATION).and_then(|v| v.to_str().ok()).unwrap_or("/").to_owned();
+            r = Json(json!({ "redirect": to })).into_response();
+        }
         r.headers_mut().append(header::SET_COOKIE, clear);
-        return r;
+        return no_store(r);
     }
     let name = client_meta(&st, &az.client_id).await.ok().and_then(|m| m["client_name"].as_str().map(str::to_owned)).unwrap_or_default();
     let code = match create_code(&st.db, &az, &user.user_id) {
@@ -598,9 +661,11 @@ async fn consent_submit(State(st): State<AppState>, MaybeUser(user): MaybeUser, 
         q.append_pair("iss", &issuer);
     }
     tracing::info!(client = %az.client_id, user = %user.user_id, "mcp authorization granted");
-    let mut res = StatusCode::SEE_OTHER.into_response();
-    if let Ok(v) = HeaderValue::from_str(u.as_str()) {
-        res.headers_mut().insert(header::LOCATION, v);
+    let mut res = if json_mode { Json(json!({ "redirect": u.as_str() })).into_response() } else { StatusCode::SEE_OTHER.into_response() };
+    if !json_mode {
+        if let Ok(v) = HeaderValue::from_str(u.as_str()) {
+            res.headers_mut().insert(header::LOCATION, v);
+        }
     }
     res.headers_mut().append(header::SET_COOKIE, clear);
     no_store(res)

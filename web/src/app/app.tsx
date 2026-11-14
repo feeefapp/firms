@@ -7,6 +7,7 @@ import { ConfirmProvider } from '@/components/ui/overlays'
 import { AppShell } from '@/shell/app-shell'
 import { changeLocale, dir, locale, LOCALES, messages, t } from '@/i18n/locale'
 import { LoginPage } from '@/pages/login'
+import { ConsentPage } from '@/pages/consent'
 import { AssistantProvider } from './assistant'
 import { PageBoundary } from './page-boundary'
 import { SessionProvider } from './session'
@@ -35,6 +36,7 @@ export function App() {
             <AssistantProvider>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/oauth/consent" element={<ConsentPage />} />
                 <Route path="/*" element={<Workspace />} />
               </Routes>
             </AssistantProvider>

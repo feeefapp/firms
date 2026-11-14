@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use axum::extract::{FromRequestParts, Query, State};
 use axum::http::request::Parts;
-use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing::get, routing::post};
 use base64::Engine as _;
@@ -96,9 +96,12 @@ pub fn same_origin(state: &AppState, headers: &HeaderMap) -> bool {
     };
     let get = |n| headers.get(n).and_then(|v: &HeaderValue| v.to_str().ok());
     let source = get(header::ORIGIN).filter(|o| *o != "null").or_else(|| get(header::REFERER));
-    source
-        .and_then(origin_of)
-        .is_some_and(|o| o == ours || state.cfg.extra_origins.iter().any(|x| *x == o))
+    match source.and_then(origin_of) {
+        Some(o) => o == ours || state.cfg.extra_origins.iter().any(|x| *x == o),
+        // A page with `Referrer-Policy: no-referrer` sends `Origin: null` and no Referer; modern browsers
+        // still tell us the request came from our own pages through Fetch Metadata.
+        None => get(HeaderName::from_static("sec-fetch-site")) == Some("same-origin"),
+    }
 }
 
 fn is_unsafe(m: &Method) -> bool {
