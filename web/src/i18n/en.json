@@ -600,6 +600,7 @@
   "m.shell.main": "Sections",
   "m.shell.navigation": "Navigation",
   "m.shell.openNavigation": "Open navigation",
+  "m.shell.tagline": "harmonized MODIS and VIIRS fire calendar",
   "m.shell.tools": "Language, theme and account",
   "m.source.?": "Unknown",
   "m.source.A": "Aqua, as measured",

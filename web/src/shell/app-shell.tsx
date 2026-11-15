@@ -55,6 +55,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const current = navItems().find((item) => isActive(pathname, item))
   const { appliedAt } = useAssistant()
 
+  // Each page names the tab (and what a share or bookmark shows).
+  useEffect(() => {
+    document.title = current && current.path !== '/' ? `${current.label} · Firms` : `Firms · ${t('m.shell.tagline')}`
+  }, [current])
+
   // Leaving the page closes the sheet, unless the assistant itself moved the page (a view it
   // applied): the conversation stays open beside what it changed.
   useEffect(() => {

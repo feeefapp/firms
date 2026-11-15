@@ -38,12 +38,13 @@ const SENSOR_OF_SYSTEM: Sensor[] = ['modis', 'viirs', 'landsat', 'geo']
 
 async function fetchJson(url: string, signal: AbortSignal) {
   const response = await fetch(url, { credentials: 'same-origin', signal })
-  const body = await response.json().catch(() => ({}))
   if (!response.ok && response.status !== 202) {
+    const body = await response.json().catch(() => ({}))
     const message = typeof body?.error === 'string' ? body.error : (body?.error?.message ?? `HTTP ${response.status}`)
     throw new ApiError(response.status, message)
   }
-  return body as DayData & { job?: Job | string }
+  // An aborted or broken body must fail here, never pass as an empty dataset.
+  return (await response.json()) as DayData & { job?: Job | string }
 }
 
 async function loadDay(date: string | null, signal: AbortSignal, onJob: (job: Job) => void): Promise<DayData> {
@@ -143,9 +144,17 @@ export default function GlobePage() {
     if (!loadKey) return
     const controller = new AbortController()
     setLoad((prev) => ({ state: 'loading', data: prev.data }))
-    const job = rangeKey ? fetchJson(rangeKey, controller.signal) : loadDay(g.date, controller.signal, (j) => setLoad((prev) => ({ ...prev, state: 'building', job: j })))
+    const job = rangeKey
+      ? fetchJson(rangeKey, controller.signal).then((d) => {
+          if (!d.cols || !d.sats) throw new Error(t('m.globe.failed'))
+          return d as DayData
+        })
+      : loadDay(g.date, controller.signal, (j) => setLoad((prev) => ({ ...prev, state: 'building', job: j })))
     job
-      .then((data) => setLoad({ state: 'ready', data }))
+      .then((data) => {
+        // A superseded request (another day, range or area was asked for meanwhile) is dropped.
+        if (!controller.signal.aborted) setLoad({ state: 'ready', data })
+      })
       .catch((failure: unknown) => {
         if (!controller.signal.aborted) setLoad({ state: 'error', error: errorMessage(failure) })
       })
@@ -419,7 +428,7 @@ export default function GlobePage() {
       : t('m.globe.today')
 
   return (
-    <div className="fm-globe">
+    <div className="fm-globe" data-wide={wide || undefined} data-pane={(wide && inspectorOpen) || undefined}>
       <div ref={host} className="fm-globe-host" />
       <ScreenTop>
         <FilterBar

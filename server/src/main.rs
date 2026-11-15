@@ -16,6 +16,7 @@ mod live;
 mod mcp;
 mod oauth;
 mod range;
+mod seo;
 mod state;
 mod tools;
 mod web;
@@ -184,6 +185,7 @@ pub fn app(st: AppState) -> Router {
         .merge(chat::routes())
         .merge(api::routes())
         .merge(mcp::routes())
+        .merge(seo::routes())
         .fallback(web::serve)
         .layer(axum::middleware::from_fn_with_state(st.clone(), limits))
         .with_state(st)

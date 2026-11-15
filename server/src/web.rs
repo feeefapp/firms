@@ -3,6 +3,7 @@
 
 use axum::body::Body;
 use axum::extract::{Request, State};
+use std::collections::HashMap;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use tower::ServiceExt as _;
@@ -27,7 +28,20 @@ pub async fn serve(State(st): State<AppState>, req: Request) -> Response {
     if !index.exists() {
         return (StatusCode::OK, Html(PLACEHOLDER)).into_response();
     }
-    let assets = req.uri().path().starts_with("/assets/");
+    let path = req.uri().path().to_owned();
+    let assets = path.starts_with("/assets/");
+    // Routes of the app (no file behind them): index.html with that route's head and content.
+    let is_file = path != "/" && dir.join(path.trim_start_matches('/')).is_file();
+    if !assets && !is_file && !path.contains("..") {
+        if let Ok(html) = tokio::fs::read_to_string(&index).await {
+            let q: HashMap<String, String> = url::form_urlencoded::parse(req.uri().query().unwrap_or("").as_bytes()).into_owned().collect();
+            let page = crate::seo::page(&st, &path, q.get("hl").map(String::as_str));
+            let html = render(&html, &page);
+            let mut res = Html(html).into_response();
+            res.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+            return res;
+        }
+    }
     // Hashed assets never fall back to index.html (a missing chunk must 404, not cache HTML forever).
     let res = if assets {
         ServeDir::new(&dir).oneshot(req).await.map(|r| r.map(Body::new).into_response())
@@ -45,4 +59,13 @@ pub async fn serve(State(st): State<AppState>, req: Request) -> Response {
     };
     res.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static(cache));
     res
+}
+
+/// index.html with the route's `<head>` (between the `seo` markers), language and crawlable body.
+fn render(html: &str, page: &crate::seo::Page) -> String {
+    let mut out = html.replacen(r#"<html lang="ar" dir="rtl">"#, &format!(r#"<html lang="{}" dir="{}">"#, page.lang, page.dir), 1);
+    if let (Some(a), Some(b)) = (out.find("<!--seo:start-->"), out.find("<!--seo:end-->")) {
+        out.replace_range(a..b + "<!--seo:end-->".len(), &page.head);
+    }
+    out.replacen(r#"<div id="root"></div>"#, &format!(r#"<div id="root">{}</div>"#, page.body), 1)
 }
