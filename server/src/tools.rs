@@ -517,6 +517,8 @@ On the globe (page \"globe\"): `date` shows one day (last 60 days) with satellit
                     "altitude_km": { "type": "number", "minimum": 3, "maximum": 150000, "description": "~20000 whole Earth, ~2000 a country, ~200 a region, ~20 a town" },
                 }, "required": ["lat", "lon"] },
                 "clear_bbox": { "type": "boolean", "description": "Globe: remove the drawn area" },
+                "heat_sources": { "type": "boolean", "description": "Globe: show or hide the icons of known heat sources (volcanoes, gas flares and industry, offshore platforms)" },
+                "hide_heat_source_detections": { "type": "boolean", "description": "Globe: leave out the fire pixels at known heat sources" },
             }), &[]),
             output: obj(json!({ "applied": { "type": "object" } }), &["applied"]),
             read_only: true,
@@ -703,6 +705,11 @@ pub fn validate_view(st: &AppState, a: &Value) -> AppResult<Value> {
     }
     if a.get("clear_bbox").and_then(Value::as_bool) == Some(true) {
         out.insert("clear_bbox".into(), json!(true));
+    }
+    for k in ["heat_sources", "hide_heat_source_detections"] {
+        if let Some(b) = a.get(k).and_then(Value::as_bool) {
+            out.insert(k.into(), json!(b));
+        }
     }
     Ok(Value::Object(out))
 }

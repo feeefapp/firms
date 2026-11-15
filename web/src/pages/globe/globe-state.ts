@@ -12,7 +12,9 @@
  *   frp=5                            minimum fire radiative power, MW
  *   dn=day | night                   day or night overpasses only
  *   cam=lat,lon,altKm                fly the camera there (applied when it changes)
- *   tab=area | record                inspector tab
+ *   heat=off                         hide the known heat source icons (volcanoes, flares, platforms)
+ *   nostatic=1                       hide the detections at known heat sources
+ *   tab=area | record | source       inspector tab
  */
 import { parseBbox } from '@/lib/bbox'
 
@@ -30,7 +32,9 @@ export type GlobeState = {
   frp: number
   dn: 0 | 1 | 2
   cam: { lat: number; lon: number; altKm: number } | null
-  tab: 'area' | 'record' | null
+  tab: 'area' | 'record' | 'source' | null
+  heat: boolean
+  nostatic: boolean
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/
@@ -62,7 +66,9 @@ export function parseGlobe(search: URLSearchParams): GlobeState {
     frp: Number.isFinite(frp) && frp > 0 ? frp : 0,
     dn: dn === 'day' ? 1 : dn === 'night' ? 2 : 0,
     cam: cam && cam.length === 3 && cam.every(Number.isFinite) ? { lat: cam[0], lon: cam[1], altKm: cam[2] } : null,
-    tab: tab === 'area' || tab === 'record' ? tab : null,
+    tab: tab === 'area' || tab === 'record' || tab === 'source' ? tab : null,
+    heat: search.get('heat') !== 'off',
+    nostatic: search.get('nostatic') === '1',
   }
 }
 
@@ -81,6 +87,8 @@ export function writeGlobe(search: URLSearchParams, patch: Partial<GlobeState>):
   if ('dn' in patch) set('dn', patch.dn === 1 ? 'day' : patch.dn === 2 ? 'night' : null)
   if ('cam' in patch) set('cam', patch.cam ? [patch.cam.lat, patch.cam.lon, Math.round(patch.cam.altKm)].join(',') : null)
   if ('tab' in patch) set('tab', patch.tab ?? null)
+  if ('heat' in patch) set('heat', patch.heat === false ? 'off' : null)
+  if ('nostatic' in patch) set('nostatic', patch.nostatic ? '1' : null)
   return next
 }
 

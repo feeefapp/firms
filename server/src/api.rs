@@ -31,6 +31,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/day", get(day))
         .route("/api/range", get(range_handler))
         .route("/api/days", get(days))
+        .route("/api/static-sources", get(static_sources))
         .route("/api/jobs/{id}", get(job))
         .route("/api/keys", get(list_keys).post(create_key))
         .route("/api/keys/{id}", delete(delete_key))
@@ -210,6 +211,21 @@ async fn range_handler(State(st): State<AppState>, Query(m): Q) -> AppResult<Res
     let settled = query.to < chrono::Utc::now().date_naive() - chrono::Duration::days(3);
     let body = crate::range::range(&st, query).await?;
     Ok(([(header::CACHE_CONTROL, if settled { "public, max-age=86400" } else { "public, max-age=900" })], Json(body)).into_response())
+}
+
+/// Known heat sources (volcanoes, gas flares and industry, offshore platforms) from the FIRMS
+/// archives' `type` flags (tools/static_sources.py): the data dir's copy, else the seed's.
+async fn static_sources(State(st): State<AppState>) -> AppResult<Response> {
+    let mut paths = vec![st.cfg.data_dir.join("static_sources.json")];
+    if let Some(seed) = &st.cfg.seed_dir {
+        paths.push(seed.join("static_sources.json"));
+    }
+    for p in paths {
+        if let Ok(b) = tokio::fs::read(&p).await {
+            return Ok(json_bytes(b, "public, max-age=3600"));
+        }
+    }
+    Ok(json_bytes(r#"{"sources":[]}"#.as_bytes().to_vec(), "public, max-age=600"))
 }
 
 async fn days(State(st): State<AppState>) -> Json<Value> {

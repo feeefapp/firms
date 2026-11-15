@@ -115,3 +115,33 @@ export function boxMask(bb: number[], lat: ArrayLike<number>, lon: ArrayLike<num
 
 /** Outline rings (outer rings and holes) for drawing. */
 export const outlineOf = (c: CountryShape): Ring[] => c.polygons.flat()
+
+/** 0 for each record at a known heat source (within its site's radius), else 1. */
+export function heatMask(sources: { lat: number; lon: number; cells: number }[], lat: ArrayLike<number>, lon: ArrayLike<number>): Uint8Array {
+  const G = 0.1
+  const grid = new Map<string, { la: number; lo: number; r: number }[]>()
+  for (const s of sources) {
+    const r = (1.5 + Math.sqrt(s.cells) * 1.4) / 111.2 // degrees of latitude
+    const key = `${Math.floor(s.lat / G)}|${Math.floor(s.lon / G)}`
+    let list = grid.get(key)
+    if (!list) grid.set(key, (list = []))
+    list.push({ la: s.lat, lo: s.lon, r })
+  }
+  const out = new Uint8Array(lat.length).fill(1)
+  for (let i = 0; i < lat.length; i++) {
+    const gi = Math.floor(lat[i] / G), gj = Math.floor(lon[i] / G)
+    const k = Math.cos((lat[i] * Math.PI) / 180)
+    search: for (let a = -1; a <= 1; a++)
+      for (let b = -1; b <= 1; b++) {
+        const list = grid.get(`${gi + a}|${gj + b}`)
+        if (!list) continue
+        for (const s of list) {
+          if (Math.hypot(lat[i] - s.la, (lon[i] - s.lo) * k) <= s.r) {
+            out[i] = 0
+            break search
+          }
+        }
+      }
+  }
+  return out
+}

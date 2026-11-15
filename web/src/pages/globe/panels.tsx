@@ -6,7 +6,7 @@ import { errorMessage } from '@/lib/errors'
 import { formatBbox, formatDate, formatNumber } from '@/lib/format'
 import { useRemote } from '@/lib/use-remote'
 import { t } from '@/i18n/locale'
-import { SYSTEM_COLORS, type DaySat, type PickedRecord, type Stats } from './engine'
+import { SYSTEM_COLORS, type DaySat, type HeatSource, type PickedRecord, type Stats } from './engine'
 
 const hhmm = (t: number) => new Date(t * 1000).toISOString().slice(11, 16)
 const kelvin = (v: number | null) => (v == null ? '–' : `${v.toFixed(1)} K ≈ ${(v - 273.15).toFixed(0)}°C`)
@@ -200,5 +200,26 @@ function Conversions({ bbox, date, regions }: { bbox: number[]; date: string; re
         </div>
       )}
     </>
+  )
+}
+
+/** A known heat source: what it is, how long FIRMS has seen it, and why it is not a wildfire. */
+export function SourceDetails({ source: s }: { source: HeatSource }) {
+  const fact = (title: string, value: string, ltr = true) => <ListRow static title={title} trailing={<span dir={ltr ? 'ltr' : undefined}>{value}</span>} />
+  return (
+    <div className="fm-stack">
+      <p className="fm-note">{t(`m.heat.about.${s.kind}`)}</p>
+      <ListSection header={t('m.heat.seen')}>
+        {fact(t('m.globe.f.position'), `${s.lat.toFixed(3)}, ${s.lon.toFixed(3)}`)}
+        {fact(t('m.heat.detections'), formatNumber(s.detections))}
+        {fact(t('m.heat.days'), formatNumber(s.days))}
+        {fact(t('m.heat.period'), `${formatDate(s.first)} → ${formatDate(s.last)}`, false)}
+        {fact(t('m.heat.size'), t('m.heat.cells', { count: s.cells }), false)}
+        {fact(t('m.heat.frp'), s.frp_mean > 0 ? `${formatNumber(s.frp_mean, 1)} MW` : '–')}
+      </ListSection>
+      <Notice tone="info" icon={<Info size={16} />}>
+        {t('m.heat.masked')}
+      </Notice>
+    </div>
   )
 }

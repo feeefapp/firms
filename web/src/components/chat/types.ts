@@ -78,6 +78,8 @@ export type FirmsView = {
   day_night?: 'all' | 'day' | 'night'
   camera?: { lat: number; lon: number; altitude_km?: number }
   clear_bbox?: boolean
+  heat_sources?: boolean
+  hide_heat_source_detections?: boolean
 }
 
 export type FirmsCardKind = 'calendar' | 'anomalies' | 'trend' | 'hotspots' | 'compare' | 'ranking'

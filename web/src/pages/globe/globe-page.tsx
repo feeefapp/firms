@@ -21,10 +21,10 @@ import { formatDate, formatNumber } from '@/lib/format'
 import { setPageContext } from '@/lib/page-context'
 import { ScreenDock, ScreenTop } from '@/shell/screen-slots'
 import { dir, t } from '@/i18n/locale'
-import { GlobeEngine, SYSTEM_COLORS, type DayData, type DaySat, type PickedRecord, type Stats } from './engine'
-import { countryMask, loadCountries, outlineOf, type CountryShape } from './countries'
+import { GlobeEngine, HEAT_KINDS, heatIconUrl, SYSTEM_COLORS, type DayData, type DaySat, type HeatSource, type PickedRecord, type Stats } from './engine'
+import { countryMask, heatMask, loadCountries, outlineOf, type CountryShape } from './countries'
 import { parseGlobe, rangeDays, SENSORS, writeGlobe, type GlobeState, type Sensor } from './globe-state'
-import { AreaPanel, RecordDetails } from './panels'
+import { AreaPanel, RecordDetails, SourceDetails } from './panels'
 import './globe.css'
 
 type Load = { state: 'loading' | 'building' | 'error' | 'ready'; data?: DayData; error?: string; job?: Job }
@@ -133,6 +133,20 @@ export default function GlobePage() {
   }, [])
   const country = useMemo(() => (countries ? findCountry(countries, g.country) : null), [countries, g.country])
 
+  // ---------- known heat sources (volcanoes, gas flares and industry, offshore platforms) ----------
+  const [heat, setHeat] = useState<HeatSource[]>([])
+  useEffect(() => {
+    let live = true
+    fetch('/api/static-sources', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : { sources: [] }))
+      .then((d: { sources?: HeatSource[] }) => live && setHeat(d.sources ?? []))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [])
+  const [source, setSource] = useState<HeatSource | null>(null)
+
   // ---------- data: a day, or a range once it has an area ----------
   const area: Area | null = country ? { country: country.en, bbox: country.bbox } : g.bbox ? { country: null, bbox: g.bbox } : null
   const rangeKey = g.range && area ? rangeUrl(g.range, area) : null
@@ -188,6 +202,10 @@ export default function GlobePage() {
             setPicked(r)
             if (r) patchRef.current({ tab: 'record' })
           },
+          onSource: (src) => {
+            setSource(src)
+            if (src) patchRef.current({ tab: 'source' })
+          },
           onBoxPoint: (stage, bb) => {
             setDrawing(stage === 2 ? 0 : 2)
             if (bb) patchRef.current({ bbox: bb, tab: 'area' }, true)
@@ -241,22 +259,32 @@ export default function GlobePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, filterKey])
 
+  useEffect(() => {
+    if (ready) engine.current?.setSources(heat)
+  }, [ready, heat])
+  useEffect(() => {
+    if (ready) engine.current?.setSourcesVisible(g.heat)
+  }, [ready, g.heat])
+
   const flewCountry = useRef<string | null>(null)
   useEffect(() => {
     const e = engine.current
     if (!ready || !e || !data) return
+    // The area mask: inside the country, and away from known heat sources when asked.
+    const inCountry = country ? countryMask(country, data.cols.lat, data.cols.lon) : null
+    const notStatic = g.nostatic && heat.length ? heatMask(heat, data.cols.lat, data.cols.lon) : null
+    if (inCountry && notStatic) for (let i = 0; i < inCountry.length; i++) inCountry[i] &= notStatic[i]
+    e.setAreaMask(inCountry ?? notStatic)
     if (!country) {
-      e.setAreaMask(null)
       e.setOutline(null)
       flewCountry.current = null
       return
     }
-    e.setAreaMask(countryMask(country, data.cols.lat, data.cols.lon))
     e.setOutline(outlineOf(country))
     if (flewCountry.current !== country.code && !g.cam && !g.bbox) e.flyToBox(country.bbox)
     flewCountry.current = country.code
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, data, country])
+  }, [ready, data, country, g.nostatic, heat])
 
   const bboxKey = g.bbox?.join(',') ?? ''
   useEffect(() => {
@@ -284,7 +312,7 @@ export default function GlobePage() {
     setBoxStats(g.bbox ? e.stats(g.bbox) : null)
     setSpots(e.hotspots(8, isRange ? 0.25 : 0.1))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, filterKey, country, bboxKey, bucket])
+  }, [ready, filterKey, country, bboxKey, bucket, g.nostatic, heat])
 
   // ---------- what the assistant sees ----------
   useEffect(() => {
@@ -297,17 +325,22 @@ export default function GlobePage() {
       visible_frp_mw: stats ? Math.round(stats.frp) : null,
       per_satellite: stats ? Object.fromEntries(sats.map((s, i) => [s.code, stats.bySat[i]]).filter(([, n]) => n)) : null,
       top_hotspots: spots.slice(0, 5).map((h) => ({ lat: +h.lat.toFixed(3), lon: +h.lon.toFixed(3), pixels: h.count, frp_mw: Math.round(h.frp) })),
+      heat_source: source ? { kind: source.kind, name: source.name ?? null, lat: source.lat, lon: source.lon, detections: source.detections, first: source.first, last: source.last } : null,
+      heat_sources_shown: g.heat,
+      heat_source_pixels_hidden: g.nostatic,
       selected_record: picked ? { satellite: picked.sat.code, lat: picked.lat, lon: picked.lon, time: new Date(picked.time * 1000).toISOString(), frp: picked.frp } : null,
     }))
     return () => setPageContext(null)
-  }, [data, country, stats, sats, picked, spots])
+  }, [data, country, stats, sats, picked, spots, source, g.heat, g.nostatic])
 
   // ---------- filter bar ----------
-  const [pinned, setPinned] = useState<string[]>(['day', 'range', 'country', 'frp', 'sensor:viirs', 'sensor:modis'])
+  const [pinned, setPinned] = useState<string[]>(['day', 'range', 'country', 'frp', 'heat:show', 'sensor:viirs', 'sensor:modis'])
   const shownDay = data && !data.range ? data.window[0] : (g.date ?? null)
   const options = useMemo<FilterOption[]>(() => {
     // Sensors and satellites are on/off filters: any that are on are shown, none on shows all.
     const onOff: FilterOption[] = [
+      { id: 'heat:show', label: t('m.heat.show'), description: t('m.heat.showHint'), keywords: [t('m.heat.title')] },
+      { id: 'heat:hide', label: t('m.heat.hide'), description: t('m.heat.hideHint'), keywords: [t('m.heat.title')] },
       ...SENSORS.filter((_, k) => sats.some((x, i) => present[i] && x.system === k)).map((sensor) => ({
         id: `sensor:${sensor}`,
         label: t(`m.globe.sensor.${sensor}`),
@@ -379,18 +412,26 @@ export default function GlobePage() {
     if (str(next.dn) !== values.dn) p.dn = str(next.dn) === 'day' ? 1 : str(next.dn) === 'night' ? 2 : 0
     if (Object.keys(p).length) patch(p, 'range' in p || 'date' in p || 'country' in p)
   }
-  const onIds = [...(g.sensors ?? []).map((x) => `sensor:${x}`), ...(g.sats ?? []).map((x) => `sat:${x}`)]
+  const onIds = [
+    ...(g.heat ? ['heat:show'] : []),
+    ...(g.nostatic ? ['heat:hide'] : []),
+    ...(g.sensors ?? []).map((x) => `sensor:${x}`),
+    ...(g.sats ?? []).map((x) => `sat:${x}`),
+  ]
   const onOffChange = (ids: string[]) => {
     const sensors = ids.filter((x) => x.startsWith('sensor:')).map((x) => x.slice(7) as Sensor)
     const picked = ids.filter((x) => x.startsWith('sat:')).map((x) => x.slice(4))
-    patch({ sensors: sensors.length ? sensors : null, sats: picked.length ? picked : null })
+    patch({ sensors: sensors.length ? sensors : null, sats: picked.length ? picked : null, heat: ids.includes('heat:show'), nostatic: ids.includes('heat:hide') })
   }
   const filtered = Boolean(g.sats || g.sensors || g.conf || g.frp || g.dn || g.country)
 
   // ---------- inspector ----------
-  const inspectorOpen = Boolean(g.bbox || picked)
-  const tab: 'area' | 'record' = g.tab === 'record' && picked ? 'record' : g.bbox ? 'area' : 'record'
+  const inspectorOpen = Boolean(g.bbox || picked || source)
+  const tabs = [g.bbox ? 'area' : null, picked ? 'record' : null, source ? 'source' : null].filter(Boolean) as ('area' | 'record' | 'source')[]
+  const tab: 'area' | 'record' | 'source' = g.tab && tabs.includes(g.tab) ? g.tab : (tabs[0] ?? 'area')
+  const tabLabel = { area: t('m.globe.tabArea'), record: t('m.globe.tabRecord'), source: t('m.heat.tab') }
   const closeInspector = () => {
+    setSource(null)
     setPicked(null)
     engine.current?.clearSelection()
     patch({ bbox: null, tab: null })
@@ -556,6 +597,12 @@ export default function GlobePage() {
                 isRange={isRange}
                 onSpot={(h) => engine.current?.flyToView({ lat: h.lat, lon: h.lon, altKm: isRange ? 120 : 60 })}
                 rangeNeedsArea={Boolean(g.range && !area)}
+                heat={g.heat ? heat : []}
+                onHeat={(kind) => {
+                  const list = heat.filter((h) => h.kind === kind)
+                  const best = list[0]
+                  if (best) engine.current?.flyToView({ lat: best.lat, lon: best.lon, altKm: kind === 'volcano' ? 60 : 400 })
+                }}
                 timeline={
                   ready && e ? (
                     <Timeline
@@ -587,24 +634,22 @@ export default function GlobePage() {
             regular="pane"
             paneWidth={400}
             modal={false}
-            title={g.bbox && picked ? undefined : tab === 'area' ? t('m.globe.tabArea') : t('m.globe.record')}
+            title={tabs.length > 1 ? undefined : tab === 'source' && source ? (source.name ?? t(`m.heat.kind.${source.kind}`)) : tab === 'area' ? t('m.globe.tabArea') : t('m.globe.record')}
             leading={
-              g.bbox && picked ? (
+              tabs.length > 1 ? (
                 <ToolbarGroup label={t('m.globe.inspector')}>
-                  <SegmentedControl
-                    label={t('m.globe.inspector')}
-                    value={tab}
-                    onChange={(v) => patch({ tab: v })}
-                    options={[
-                      { value: 'area', label: t('m.globe.tabArea') },
-                      { value: 'record', label: t('m.globe.tabRecord') },
-                    ]}
-                  />
+                  <SegmentedControl label={t('m.globe.inspector')} value={tab} onChange={(v) => patch({ tab: v })} options={tabs.map((x) => ({ value: x, label: tabLabel[x] }))} />
                 </ToolbarGroup>
               ) : undefined
             }
             trailing={
-              tab === 'area' && g.bbox ? (
+              tab === 'source' && source ? (
+                <ToolbarGroup label={t('m.heat.actions')}>
+                  <IconButton variant="text" appearance="toolbar" aria-label={t('m.globe.zoomTo')} onClick={() => engine.current?.flyToView({ lat: source.lat, lon: source.lon, altKm: 30 })}>
+                    <ZoomIn />
+                  </IconButton>
+                </ToolbarGroup>
+              ) : tab === 'area' && g.bbox ? (
                 <ToolbarGroup label={t('m.globe.areaActions')}>
                   <IconButton variant="text" appearance="toolbar" aria-label={t('m.globe.zoomTo')} onClick={() => g.bbox && engine.current?.flyToBox(g.bbox)}>
                     <ZoomIn />
@@ -625,7 +670,7 @@ export default function GlobePage() {
               ) : undefined
             }
             dock={
-              tab === 'area' && g.bbox ? (
+              tab === 'source' ? undefined : tab === 'area' && g.bbox ? (
                 <PresentationDock label={t('m.globe.areaActions')}>
                   <Button variant="filled" disabled={!boxStats?.total} onClick={downloadCsv}>
                     <Download aria-hidden />
@@ -642,7 +687,9 @@ export default function GlobePage() {
               ) : undefined
             }
           >
-            {tab === 'record' && picked ? (
+            {tab === 'source' && source ? (
+              <SourceDetails source={source} />
+            ) : tab === 'record' && picked ? (
               <RecordDetails record={picked} />
             ) : g.bbox ? (
               <AreaPanel
@@ -723,6 +770,8 @@ function Explore({
   onSpot,
   rangeNeedsArea,
   timeline,
+  heat,
+  onHeat,
 }: {
   periodLabel: string
   data?: DayData
@@ -736,6 +785,8 @@ function Explore({
   onSpot: (h: ReturnType<GlobeEngine['hotspots']>[number]) => void
   rangeNeedsArea: boolean
   timeline: React.ReactNode
+  heat: HeatSource[]
+  onHeat: (kind: HeatSource['kind']) => void
 }) {
   const sheet = useSheet()
   if (sheet?.detent === 'peek') return null
@@ -769,6 +820,24 @@ function Explore({
           <ListRow static title={t('m.globe.noSpots')} />
         )}
       </ListSection>
+      {heat.length ? (
+        <ListSection header={t('m.heat.title')} footer={t('m.heat.legendHint')}>
+          {HEAT_KINDS.map((kind) => {
+            const n = heat.filter((h) => h.kind === kind).length
+            return n ? (
+              <ListRow
+                key={kind}
+                leading={<img src={heatIconUrl(kind)} alt="" width={24} height={24} />}
+                title={t(`m.heat.kind.${kind}`)}
+                subtitle={t(`m.heat.kindHint.${kind}`)}
+                trailing={formatNumber(n)}
+                chevron
+                onClick={() => onHeat(kind)}
+              />
+            ) : null
+          })}
+        </ListSection>
+      ) : null}
       <ListSection header={t('m.globe.satellites')} footer={t('m.globe.soloHint')}>
         {sats.map((s, i) =>
           present[i] ? (

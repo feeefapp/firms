@@ -98,6 +98,103 @@ type Callbacks = {
   onPick: (record: PickedRecord | null) => void
   onBoxPoint: (stage: 0 | 1 | 2, bbox: number[] | null) => void
   onTick: (simT: number, playing: boolean) => void
+  /** A known heat source icon was tapped (null when the tap missed every icon). */
+  onSource?: (source: HeatSource | null) => void
+}
+
+/** A persistent non-vegetation heat source from the FIRMS archives (tools/static_sources.py). */
+export type HeatSource = {
+  kind: 'volcano' | 'industrial' | 'offshore'
+  lat: number
+  lon: number
+  detections: number
+  days: number
+  first: string
+  last: string
+  years: number
+  cells: number
+  frp_mean: number
+  region?: string
+  name?: string
+}
+export const HEAT_KINDS = ['industrial', 'offshore', 'volcano'] as const
+
+/**
+ * One icon per kind, drawn once: a white disc with a dark ring (readable on the night side, the
+ * desert and the ocean alike) and the kind's glyph in its colour.
+ */
+function iconCanvas(kind: HeatSource['kind']) {
+  const S = 128
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const g = c.getContext('2d')!
+  const m = S / 2
+  g.shadowColor = 'rgba(0,0,0,0.55)'
+  g.shadowBlur = 10
+  g.beginPath()
+  g.arc(m, m, 46, 0, Math.PI * 2)
+  g.fillStyle = '#ffffff'
+  g.fill()
+  g.shadowBlur = 0
+  g.lineWidth = 7
+  g.strokeStyle = '#141a20'
+  g.stroke()
+  g.lineJoin = 'round'
+  g.lineCap = 'round'
+  const flame = (x: number, y: number, h: number, color: string) => {
+    g.beginPath()
+    g.moveTo(x, y - h)
+    g.bezierCurveTo(x + h * 0.55, y - h * 0.45, x + h * 0.5, y, x, y)
+    g.bezierCurveTo(x - h * 0.5, y, x - h * 0.55, y - h * 0.45, x, y - h)
+    g.fillStyle = color
+    g.fill()
+  }
+  if (kind === 'volcano') {
+    g.beginPath()
+    g.moveTo(m - 30, m + 24)
+    g.lineTo(m - 9, m - 10)
+    g.lineTo(m - 3, m - 4)
+    g.lineTo(m + 3, m - 10)
+    g.lineTo(m + 9, m - 10)
+    g.lineTo(m + 30, m + 24)
+    g.closePath()
+    g.fillStyle = '#7a3b2e'
+    g.fill()
+    flame(m, m - 8, 20, '#e8452f')
+  } else if (kind === 'industrial') {
+    g.fillStyle = '#3a4048'
+    g.fillRect(m - 6, m - 4, 12, 30)
+    flame(m, m - 4, 30, '#f08a1c')
+    flame(m, m - 6, 15, '#ffd25a')
+  } else {
+    g.strokeStyle = '#1f5fae'
+    g.lineWidth = 6
+    g.beginPath()
+    g.moveTo(m - 24, m + 2)
+    g.lineTo(m + 24, m + 2)
+    g.moveTo(m - 16, m + 2)
+    g.lineTo(m - 20, m + 26)
+    g.moveTo(m + 16, m + 2)
+    g.lineTo(m + 20, m + 26)
+    g.moveTo(m - 28, m + 18)
+    g.quadraticCurveTo(m, m + 12, m + 28, m + 18)
+    g.stroke()
+    flame(m + 6, m - 2, 22, '#f08a1c')
+  }
+  return c
+}
+const iconUrls = new Map<string, string>()
+/** The icon as an image URL, for legends and lists. */
+export function heatIconUrl(kind: HeatSource['kind']) {
+  let u = iconUrls.get(kind)
+  if (!u) iconUrls.set(kind, (u = iconCanvas(kind).toDataURL()))
+  return u
+}
+function iconTexture(kind: HeatSource['kind']) {
+  const tex = new THREE.CanvasTexture(iconCanvas(kind))
+  tex.colorSpace = THREE.LinearSRGBColorSpace
+  tex.anisotropy = 4
+  return tex
 }
 
 /** What is shown besides time: per-satellite mask plus record filters. */
@@ -174,6 +271,9 @@ export class GlobeEngine {
   private pinch = new Map<number, [number, number]>()
   private pinchDist = 0
   private order: Int32Array = new Int32Array(0)
+  private sources: HeatSource[] = []
+  private sourceLayers: THREE.Points[] = []
+  private sourcesOn = true
   private inMask: Uint8Array | null = null
   private outline: THREE.LineSegments
   private disposed = false
@@ -668,6 +768,61 @@ export class GlobeEngine {
   setWindow(seconds: number) {
     this.fireU.uWindow.value = seconds
   }
+  /** The known heat sources' icons (constant size on screen, hidden behind the Earth). */
+  setSources(list: HeatSource[]) {
+    for (const p of this.sourceLayers) {
+      this.scene.remove(p)
+      p.geometry.dispose()
+      ;(p.material as THREE.PointsMaterial).map?.dispose()
+      ;(p.material as THREE.Material).dispose()
+    }
+    this.sourceLayers = []
+    this.sources = list
+    const v = new THREE.Vector3()
+    for (const kind of HEAT_KINDS) {
+      const pts: number[] = []
+      for (const s of list) {
+        if (s.kind !== kind) continue
+        ll2v(s.lat, s.lon, 1.0006, v)
+        pts.push(v.x, v.y, v.z)
+      }
+      if (!pts.length) continue
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+      const layer = new THREE.Points(
+        geo,
+        new THREE.PointsMaterial({ map: iconTexture(kind), size: 22, sizeAttenuation: false, transparent: true, alphaTest: 0.05, depthWrite: false }),
+      )
+      layer.renderOrder = 9
+      layer.frustumCulled = false
+      this.scene.add(layer)
+      this.sourceLayers.push(layer)
+    }
+  }
+  setSourcesVisible(on: boolean) {
+    this.sourcesOn = on
+  }
+  /** The icon under a screen point (16 px), front side of the Earth only. */
+  private pickSource(e: { clientX: number; clientY: number }): HeatSource | null {
+    if (!this.sourcesOn || !this.sourceLayers.some((l) => l.visible) || !this.sources.length) return null
+    const r = this.renderer.domElement.getBoundingClientRect()
+    const v = new THREE.Vector3()
+    const cam = this.camera.position
+    let best: HeatSource | null = null
+    let bd = 18
+    for (const s of this.sources) {
+      ll2v(s.lat, s.lon, 1, v)
+      if (v.dot(cam) - 1 < 0) continue
+      v.project(this.camera)
+      const d = Math.hypot(((v.x + 1) / 2) * r.width - (e.clientX - r.left), ((1 - v.y) / 2) * r.height - (e.clientY - r.top))
+      if (d < bd) {
+        bd = d
+        best = s
+      }
+    }
+    return best
+  }
+
   /** Satellites, confidence, FRP and day/night: drawn and picked alike. */
   setFilters(f: FireFilters) {
     const mask = this.fireU.uMask.value as number[]
@@ -891,6 +1046,11 @@ export class GlobeEngine {
     const hit = this.hit(e)
     if (!hit) {
       this.select(-1)
+      return
+    }
+    const source = this.pickSource(e)
+    if (source) {
+      this.cb.onSource?.(source)
       return
     }
     this.select(this.nearest(hit.clone().normalize()))
@@ -1167,6 +1327,13 @@ export class GlobeEngine {
     }
     if (this.selGroup.visible) this.ring.scale.setScalar(Math.max(alt * 0.012, 0.00004))
     this.tiles.update(this.camera, this.view.clientWidth, this.view.clientHeight)
+    // Icons appear from about a continent's view down, growing a little as you zoom in.
+    const iconsOn = this.sourcesOn && alt < 1.2
+    const px = (alt > 0.4 ? 18 : alt > 0.08 ? 22 : 28) * this.renderer.getPixelRatio()
+    for (const l of this.sourceLayers) {
+      l.visible = iconsOn
+      ;(l.material as THREE.PointsMaterial).size = px
+    }
 
     // labels: hidden behind the Earth
     const w = this.view.clientWidth
