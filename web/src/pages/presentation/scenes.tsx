@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowUpRight, CalendarDays, Check, Database, Earth, Flame, Layers, Satellite, ScanLine } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, Check, Database, Earth, Flame, CodeXml, Layers, Satellite, ScanLine } from 'lucide-react'
 import { CalendarVisual, Experiments, FireDayGrid, FrpCurve, HistoryChart, ReferenceTimeline, RegionPicker, Results, StudyMap, ValidationTimeline, WeightChart, fmt } from './visuals'
 import { GlobeVisual } from './globe-visual'
 import { type Region } from './content'
@@ -32,6 +32,28 @@ function Demo() {
   return <div className={`mission-demo ${view === 'globe' ? 'is-globe' : ''}`}><div className="mission-demo-heading"><h1>The history,<br />in your hands.</h1><div className="mission-demo-actions"><div className="mission-toggle"><button aria-pressed={view === 'calendar'} onClick={() => setView('calendar')}><CalendarDays size={17} />Calendar</button><button aria-pressed={view === 'globe'} onClick={() => setView('globe')}><Earth size={17} />Globe</button></div><a href="/" target="_blank" rel="noreferrer">Open Firms<ArrowUpRight size={17} /></a></div></div><div className="mission-demo-stage">{view === 'calendar' ? <CalendarVisual /> : <GlobeVisual interactive />}</div></div>
 }
 
+function ThankYou() {
+  const destinations = [
+    { name: 'Explore the project', address: 'firms.apps.feeef.dev', url: 'https://firms.apps.feeef.dev', image: 'project-qr.svg', Icon: Earth },
+    { name: 'Get the source', address: 'github.com/feeefapp/firms', url: 'https://github.com/feeefapp/firms', image: 'github-qr.svg', Icon: CodeXml },
+  ]
+  return <div className="mission-closing mission-thanks">
+    <div className="mission-closing-earth"><GlobeVisual /></div>
+    <Copy title={<>Thank you.</>}>
+      <p>A clearer history.<br />Better preparation.</p>
+      <span className="mission-thanks-invitation">Scan to explore. Stay curious.</span>
+    </Copy>
+    <div className="mission-qr-links" aria-label="Project and source code links">
+      {destinations.map(({ name, address, url, image, Icon }) => <a key={url} href={url} target="_blank" rel="noreferrer" className="mission-qr-link">
+        <div className="mission-qr-heading"><Icon size={20} aria-hidden /><span>{name}</span><ArrowUpRight size={16} aria-hidden /></div>
+        <div className="mission-qr-frame"><img src={`/presentation/${image}`} alt={`QR code for ${url}`} width="232" height="232" /></div>
+        <span className="mission-qr-address">{address}</span>
+      </a>)}
+    </div>
+    <p className="mission-close-limit"><Flame size={17} />For responders, scientists, and land managers. Data from NASA FIRMS.</p>
+  </div>
+}
+
 export function Scene({ index }: { index: number }) {
   const [region, setRegion] = useState<Region>('punjab')
   switch (index) {
@@ -49,6 +71,6 @@ export function Scene({ index }: { index: number }) {
     case 11: return <div className="mission-wide"><div className="mission-result-heading"><Copy title={<>Around 10%<br />forward-test error.</>} /><p>About half the error<br />of a fixed multiplier.</p></div><Results /></div>
     case 12: return <div className="mission-split mission-technical"><Copy title={<>The instruments<br />disagree, too.</>}><Technical>8A</Technical><p>Even the same camera type sees a different moment.</p><small>Fewer fire-days mean larger percentage swings.<br />N = expected observed count per camera.<br />p = detection probability.</small></Copy><div className="mission-visual"><NoiseModel /></div></div>
     case 13: return <Demo />
-    default: return <div className="mission-closing"><div className="mission-closing-earth"><GlobeVisual /></div><Copy title={<>A clearer history.<br />Better preparation.</>}><p>For responders, scientists,<br />and land managers.</p><div className="mission-next"><b>The next step</b><span>More fire regimes. Better sparse-region calibration.<br />Clearer estimates of uncertainty.</span></div><a className="mission-live-link" href="https://firms.apps.feeef.dev" target="_blank" rel="noreferrer">Explore Firms<ArrowUpRight size={23} /></a></Copy><p className="mission-close-limit"><Flame size={17} />Accuracy varies by region. Recent data may change after reprocessing.</p></div>
+    default: return <ThankYou />
   }
 }

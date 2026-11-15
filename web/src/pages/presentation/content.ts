@@ -13,7 +13,7 @@ export const slides = [
   { id: '8', title: 'Around 10% forward-test error.', section: 'The result' },
   { id: '8A', title: 'The instruments disagree, too.', section: 'Technical detail', technical: true },
   { id: '9', title: 'The history, in your hands.', section: 'The application' },
-  { id: '10', title: 'A clearer history. Better preparation.', section: 'The next step' },
+  { id: '10', title: 'Thank you. Explore Firms.', section: 'The project' },
 ] as const
 
 export type Slide = (typeof slides)[number]

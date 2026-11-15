@@ -8,6 +8,9 @@
   This is an archived demonstration sample, not a complete global count or a live monitoring feed.
 - Space Grotesk and Manrope: self-hosted variable fonts from https://github.com/google/fonts .
   Their SIL Open Font License files are included in `fonts/`.
+- `project-qr.svg` and `github-qr.svg`: locally generated QR codes for
+  https://firms.apps.feeef.dev and https://github.com/feeefapp/firms . Both use high error
+  correction and a four-module quiet zone. The decorative slide frames sit outside the codes.
 
 We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management
 System (FIRMS), part of NASA's Earth Science Data and Information System (ESDIS):
