@@ -11,12 +11,18 @@ export function RegionPicker({ value, onChange }: { value: Region; onChange: (r:
 }
 
 export function StudyMap() {
-  return <svg className="mission-study-map" viewBox="0 0 1000 500" role="img" aria-label="The four study regions across three continents">
+  const regions = [
+    ...studyRegions.map(r => ({ name: regionNames[r].replace(', India', ''), bbox: study[r].bbox, additional: false })),
+    { name: 'Algeria (north)', bbox: guide.regions.algeria.bbox, additional: true },
+  ]
+  return <svg className="mission-study-map" viewBox="0 0 1000 500" role="img" aria-label="Four benchmark regions and an additional validation check in northern Algeria">
     <image href="/presentation/earth-blue-marble.jpg" width="1000" height="500" opacity=".5" />
-    {studyRegions.map((r, i) => {
-      const [west, south, east, north] = study[r].bbox
+    {regions.map(({ name, bbox, additional }, i) => {
+      const [west, south, east, north] = bbox
       const x = ((west + east) / 2 + 180) / 360 * 1000, y = (90 - (south + north) / 2) / 180 * 500
-      return <g key={r}><circle cx={x} cy={y} r="15" fill="none" stroke={i % 2 ? '#65baf3' : '#f4a364'} opacity=".5" /><circle cx={x} cy={y} r="4" fill={i % 2 ? '#65baf3' : '#f4a364'} /><text x={x + 19} y={y + 5}>{regionNames[r].replace(', India', '')}</text></g>
+      const color = additional ? '#7cd6b0' : i % 2 ? '#65baf3' : '#f4a364'
+      const labelOffset = additional ? 23 : name === 'Portugal' ? -13 : 5
+      return <g key={name}><circle cx={x} cy={y} r="15" fill="none" stroke={color} opacity=".5" /><circle cx={x} cy={y} r="4" fill={color} /><text x={x + 19} y={y + labelOffset}>{name}</text></g>
     })}
   </svg>
 }
@@ -27,20 +33,25 @@ export function HistoryChart({ region }: { region: Region }) {
   const years = Array.from({ length: 25 }, (_, i) => 2001 + i)
   const annual = (key: 'naive' | 'ensemble_adaptive') => years.map((_, i) => study[region].series[key].slice(i * 12, i * 12 + 12).reduce((s, x) => s + x, 0))
   const joined = annual('naive'), harmonized = annual('ensemble_adaptive')
+  const orangeSource = (year: number) => year === 2001 ? 'Terra' : year < 2012 ? 'Terra + Aqua' : 'VIIRS'
   const max = Math.max(...joined) * 1.12, X = (i: number) => 64 + i * 28, Y = (n: number) => 330 - n / max * 275
   const path = (v: number[]) => v.map((n, i) => `${i ? 'L' : 'M'}${X(i)},${Y(n)}`).join(' ')
   return <div className="mission-chart">
-    <div className="mission-chart-legend"><button aria-pressed={showJoined} onClick={() => setShowJoined(v => !v)}><i className="is-orange" />Direct join</button><span><i />Harmonized</span></div>
-    <svg viewBox="0 0 800 400" role="img" aria-label={`Annual fire-days in ${regionNames[region]}, direct join and harmonized`}>
+    <div className="mission-chart-legend"><button aria-pressed={showJoined} onClick={() => setShowJoined(v => !v)}><i className="is-orange" />MODIS → VIIRS (unadjusted)</button><span><i />Aqua-equivalent</span></div>
+    <svg viewBox="0 0 800 400" role="img" aria-label={`Annual fire-days in ${regionNames[region]}: orange switches from Terra and Aqua MODIS to VIIRS in 2012; blue is harmonized to Aqua equivalents`}>
       {[0, 1, 2, 3].map(i => <g key={i}><line x1="64" x2="736" y1={Y(max * i / 3)} y2={Y(max * i / 3)} className="chart-grid" /><text x="49" y={Y(max * i / 3) + 5} textAnchor="end">{fmt(max * i / 3000)}k</text></g>)}
       {[0, 5, 10, 15, 20, 24].map(i => <text key={i} x={X(i)} y="360" textAnchor="middle">{years[i]}</text>)}
-      <line x1={X(11)} x2={X(11)} y1="30" y2="332" className="chart-marker" /><text x={X(11) + 10} y="25" className="chart-annotation">VIIRS begins</text>
+      <line x1={X(11)} x2={X(11)} y1="30" y2="332" className="chart-marker" /><text x={X(11) + 10} y="25" className="chart-annotation">Switch to VIIRS · 2012</text>
       {showJoined && <path key={`${region}-joined`} d={path(joined)} className="chart-trace trace-orange" pathLength="1" />}
       <path key={`${region}-harm`} d={path(harmonized)} className="chart-trace" pathLength="1" />
       {hover !== null && <g><line x1={X(hover)} x2={X(hover)} y1="45" y2="332" className="chart-crosshair" /><circle cx={X(hover)} cy={Y(harmonized[hover])} r="6" className="chart-dot" /></g>}
       <rect x="64" y="40" width="672" height="292" fill="transparent" onPointerMove={e => { const box = e.currentTarget.ownerSVGElement!.getBoundingClientRect(); setHover(Math.max(0, Math.min(24, Math.round(((e.clientX - box.left) / box.width * 800 - 64) / 28)))) }} onPointerLeave={() => setHover(null)} />
     </svg>
-    <div className="mission-chart-caption">{hover === null ? 'Annual fire-days, 2001–2025. Hover to inspect.' : `${years[hover]}: ${fmt(harmonized[hover])} Aqua-equivalent fire-days${showJoined ? ` / ${fmt(joined[hover])} directly joined` : ''}`}</div>
+    <div className="mission-chart-explanation">
+      <p>Orange: Terra + Aqua when available through 2011; VIIRS from 2012.</p>
+      <p>Earlier gap: Terra adds observations; blue uses Aqua from July 2002.</p>
+    </div>
+    <div className="mission-chart-caption" aria-live="polite">{hover === null ? 'Annual fire-days, 2001–2025. Hover to inspect.' : `${years[hover]}: ${fmt(harmonized[hover])} Aqua-equivalent fire-days${showJoined ? ` / ${fmt(joined[hover])} unadjusted (${orangeSource(years[hover])})` : ''}`}</div>
   </div>
 }
 
@@ -73,18 +84,33 @@ export function ReferenceTimeline() {
   return <div className="mission-reference"><div className="mission-reference-track">{periods.map((p, i) => <button key={p.satellite} className={p.className} aria-pressed={active === i} onClick={() => setActive(i)}><Satellite size={38} /><b>{p.satellite}</b><span>{p.date}</span></button>)}</div><div className="mission-reference-explanation"><ArrowRight size={25} /><p>{periods[active].why}</p></div><div className="mission-reference-unit">Aqua-equivalent fire-days throughout</div></div>
 }
 
+const meanForwardError = (method: 'ratio' | 'ratio_month' | 'frp' | 'ensemble', adaptive = false) =>
+  (studyRegions.reduce((sum, r) => sum + study[r].eval[method][adaptive ? 'forward_adaptive' : 'forward'], 0) / studyRegions.length).toFixed(1)
+
 const experiments = [
-  ['Fixed multiplier', 'Start with one conversion factor.', 'A useful baseline, but it misses seasonal variation.', 'baseline'],
-  ['Monthly ratios', 'Account for the burning season.', 'A major gain. The sensor relationship changes with the month.', 'gain'],
-  ['Fire-strength curves', 'Account for weak and strong fire-days.', 'Useful alongside seasonal ratios, especially as fire strength changes.', 'gain'],
-  ['Total fire energy', 'Try a different measure of activity.', 'Higher conversion error. A few large fires dominate the total.', 'tested'],
-  ['Clouds and overpass time', 'Account for observation conditions.', 'No consistent improvement with the tested corrections.', 'tested'],
-  ['Machine learning', 'Learn more complex relationships.', 'Small additional gains with more model complexity.', 'tested'],
-  ['Adaptive calibration', 'Give recent years more influence.', 'Forward-test error falls from 11.4% to about 10%.', 'selected'],
+  { name: 'Fixed multiplier', hypothesis: 'Start with one conversion factor.', outcome: `${meanForwardError('ratio')}% error`, result: 'A useful baseline, but one factor misses the seasonal changes between the sensors.', state: 'baseline' },
+  { name: 'Monthly ratios', hypothesis: 'Account for the burning season.', outcome: `${meanForwardError('ratio_month')}% error`, result: `A major improvement over the ${meanForwardError('ratio')}% baseline. The sensor relationship changes with the month.`, state: 'gain' },
+  { name: 'Fire-strength curves', hypothesis: 'Account for weak and strong fire-days.', outcome: `${meanForwardError('frp')}% error alone`, result: `Useful on its own. Combining season-aware fire strength with monthly ratios reaches ${meanForwardError('ensemble')}% error.`, state: 'gain' },
+  { name: 'Total fire energy', hypothesis: 'Try a different measure of activity.', outcome: 'Worse overall', result: 'Energy conversion had higher average error than fire-day counts in the original benchmark. A few large fires dominate the energy total.', state: 'tested' },
+  { name: 'Clouds and overpass time', hypothesis: 'Account for observation conditions.', outcome: 'No reliable gain', result: 'Cloud corrections gave no consistent improvement. The tested GOES-based overpass-time correction over-corrected.', state: 'tested' },
+  { name: 'Machine learning', hypothesis: 'Learn more complex relationships.', outcome: 'Similar accuracy', result: 'Plain boosting did not beat the ensemble on average. More advanced blends gave only small gains with added complexity.', state: 'tested' },
+  { name: 'Adaptive calibration', hypothesis: 'Give recent years more influence.', outcome: `${meanForwardError('ensemble', true)}% error`, result: `Recent-year weighting lowers mean forward-test error from ${meanForwardError('ensemble')}% to ${meanForwardError('ensemble', true)}% across the four study regions.`, state: 'selected' },
 ]
 export function Experiments() {
   const [active, setActive] = useState(6)
-  return <div className="mission-experiments"><div className="mission-experiment-list">{experiments.map(([name, , , state], i) => <button key={name} onClick={() => setActive(i)} aria-pressed={i === active}><span className={`mission-experiment-dot ${state}`} /><span>{name}</span><ArrowRight size={17} /></button>)}</div><div className="mission-experiment-detail" key={active}><span className="mission-detail-label">The hypothesis</span><h3>{experiments[active][1]}</h3><span className="mission-detail-label">What we learned</span><p>{experiments[active][2]}</p></div></div>
+  const selected = experiments[active]
+  return <div className="mission-experiments">
+    <div className="mission-experiment-comparison">
+      <p className="mission-experiment-score-label">Mean forward-test error · Lower is better</p>
+      <div className="mission-experiment-list" aria-label="Tested methods and results">{experiments.map(({ name, outcome, state }, i) => <button key={name} onClick={() => setActive(i)} aria-pressed={i === active}><span className={`mission-experiment-dot ${state}`} /><span className="mission-experiment-label"><span>{name}</span><strong className={`mission-experiment-outcome ${state}`}>{outcome}</strong></span><ArrowRight size={17} /></button>)}</div>
+      <p className="mission-experiment-score-note">Scores: fire-day WAPE, four-region mean, 2018–2021.</p>
+    </div>
+    <div className="mission-experiment-detail" key={active} role="region" aria-label="Selected method result">
+      <span className="mission-detail-label">{selected.name}</span><h3>{selected.outcome}</h3><p>{selected.result}</p>
+      <div className="mission-experiment-reason"><span className="mission-detail-label">Why we tested it</span><p>{selected.hypothesis}</p></div>
+      <small className="mission-experiment-source">{[3, 4, 5].includes(active) ? 'Outcome from the original benchmark and tested corrections.' : 'Score from the current regional evaluation files.'}</small>
+    </div>
+  </div>
 }
 
 export function FrpCurve() {
@@ -108,7 +134,19 @@ export function WeightChart() {
 export function ValidationTimeline() {
   const [mode, setMode] = useState<'forward' | 'hidden'>('forward')
   const [year, setYear] = useState(2018)
-  return <div className="mission-validation"><div className="mission-toggle"><button aria-pressed={mode === 'hidden'} onClick={() => setMode('hidden')}>Hide a year</button><button aria-pressed={mode === 'forward'} onClick={() => setMode('forward')}>Forward test</button></div><div className="mission-year-strip">{Array.from({ length: 10 }, (_, i) => 2012 + i).map(y => <button key={y} onClick={() => { setYear(y); setMode('hidden') }} className={(mode === 'hidden' ? y === year : y >= 2018) ? 'test-year' : 'learn-year'}><span>{y}</span><b>{mode === 'hidden' ? y === year ? 'Test' : 'Learn' : y >= 2018 ? 'Test' : 'Learn'}</b></button>)}</div><p>{mode === 'hidden' ? `Hide ${year}. Estimate it using the other overlap years.` : 'Static forward: learn from 2012–2017, test 2018–2021.'}</p><small>Adaptive forward refits before each test year, using only earlier observations.</small></div>
+  const unseenYear = mode === 'hidden'
+  return <div className="mission-validation">
+    <div className="mission-toggle" role="group" aria-label="Test design"><button aria-pressed={unseenYear} onClick={() => setMode('hidden')}>Test on an unseen year</button><button aria-pressed={!unseenYear} onClick={() => setMode('forward')}>Forward test</button></div>
+    <div className="mission-validation-summary" role="status" aria-live="polite">
+      <span><b>{unseenYear ? '9 years' : '6 years'}</b> learn{!unseenYear && ' · 2012–2017'}</span><ArrowRight size={20} aria-hidden="true" /><span className="is-test"><b>{unseenYear ? '1 year' : '4 years'}</b> test · {unseenYear ? year : '2018–2021'}</span>
+    </div>
+    <div className="mission-year-strip">{Array.from({ length: 10 }, (_, i) => 2012 + i).map(y => {
+      const test = unseenYear ? y === year : y >= 2018
+      return <button key={y} aria-label={`Test on unseen year ${y}`} aria-pressed={unseenYear && y === year} onClick={() => { setYear(y); setMode('hidden') }} className={test ? 'test-year' : 'learn-year'}><span>{y}</span><b>{test ? 'Test' : 'Learn'}</b></button>
+    })}</div>
+    <p>{unseenYear ? `Test ${year} using a model trained on the other nine years. Repeat for every year.` : 'Testing starts in 2018: six years to learn, then four later years to test.'}</p>
+    <div className="mission-validation-actions">{unseenYear && <button onClick={() => setYear(y => y === 2021 ? 2012 : y + 1)}>Next test year<ArrowRight size={15} aria-hidden="true" /></button>}<small>{unseenYear ? 'Unseen means excluded from training, not bad data. Click a year to select it.' : 'Click a year to test it separately. Adaptive forward refits using only earlier years.'}</small></div>
+  </div>
 }
 
 export function Results() {

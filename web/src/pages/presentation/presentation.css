@@ -468,6 +468,7 @@
 }
 .mission-chart-legend {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 24px;
   padding: 22px 30px 0;
@@ -489,6 +490,15 @@
 }
 .mission-chart-legend .is-orange {
   background: var(--mission-orange);
+}
+.mission-chart-explanation {
+  padding: 0 0 8px 8%;
+  color: var(--mission-muted);
+  font-size: clamp(11px,1vw,14px);
+  line-height: 1.6;
+}
+.mission-chart-explanation p {
+  margin: 0;
 }
 .mission-chart-caption {
   font-size: 12px;
@@ -729,6 +739,35 @@
   display: flex;
   flex-direction: column;
 }
+.mission-experiment-score-label,
+.mission-experiment-score-note {
+  color: var(--mission-muted);
+  font-size: clamp(10px,.85vw,13px);
+  line-height: 1.5;
+}
+.mission-experiment-score-label {
+  margin-bottom: 10px;
+}
+.mission-experiment-score-note {
+  margin-top: 12px;
+}
+.mission-experiment-label {
+  display: grid;
+  gap: 3px;
+}
+.mission-experiment-outcome {
+  font-size: clamp(11px,1vw,16px);
+  font-weight: 500;
+  line-height: 1.35;
+  color: #bdcbd5;
+  font-variant-numeric: tabular-nums;
+}
+.mission-experiment-outcome.gain {
+  color: var(--mission-blue);
+}
+.mission-experiment-outcome.selected {
+  color: var(--mission-orange);
+}
 .mission-experiment-list>button {
   display: flex;
   align-items: center;
@@ -786,6 +825,26 @@
   line-height: 1.65;
   color: #c1d2df;
   max-width: 27em;
+}
+.mission-experiment-reason {
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid var(--mission-line);
+}
+.mission-experiment-reason .mission-detail-label {
+  margin-bottom: 8px;
+}
+.mission-experiment-reason p {
+  font-size: clamp(14px,1.2vw,20px);
+  line-height: 1.5;
+  color: var(--mission-muted);
+}
+.mission-experiment-source {
+  display: block;
+  margin-top: 18px;
+  color: var(--mission-muted);
+  font-size: clamp(10px,.8vw,12px);
+  line-height: 1.6;
 }
 .mission-method-line {
   display: flex;
@@ -1006,7 +1065,7 @@
 }
 .mission-regimes {
   display: grid;
-  grid-template-columns: repeat(4,1fr);
+  grid-template-columns: repeat(5,minmax(0,1fr));
   gap: 25px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--mission-line);
@@ -1023,6 +1082,15 @@
   background: var(--mission-orange);
   border-radius: 50%;
 }
+.mission-region-dot.region-4 {
+  background: #7cd6b0;
+}
+.mission-validation-cohort-note {
+  margin-top: 10px;
+  color: var(--mission-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
 .mission-regimes>div>b {
   font-weight: 500;
   font-size: clamp(14px,1.5vw,24px);
@@ -1037,7 +1105,24 @@
   margin-bottom: auto;
 }
 .mission-validation>.mission-toggle {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.mission-validation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 14px;
+  color: var(--mission-muted);
+  font-size: clamp(12px,1.15vw,18px);
+}
+.mission-validation-summary b {
+  color: var(--mission-blue);
+  font-weight: 600;
+}
+.mission-validation-summary .is-test,.mission-validation-summary .is-test b {
+  color: var(--mission-orange);
 }
 .mission-year-strip {
   display: grid;
@@ -1055,7 +1140,7 @@
   transition: background .25s;
 }
 .mission-year-strip .test-year {
-  background: #4e34221c;
+  background: #f4a36424;
   border-top-color: var(--mission-orange);
 }
 .mission-year-strip>button span {
@@ -1080,6 +1165,25 @@
   color: var(--mission-muted);
   margin-top: 7px;
   line-height: 1.7;
+}
+.mission-validation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+.mission-validation-actions>button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mission-orange);
+  font-size: 12px;
+}
+.mission-validation-actions>small {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--mission-muted);
 }
 .mission-error-example>.mission-equation {
   justify-content: center;

@@ -1,0 +1,85 @@
+# NASA Space Apps 2026 project entry
+
+Team: Spacedev (Algiers, Algeria)
+
+Team members listed on the event site: Abdelhak Si hamdi; BENGANIF Mohamed Badreddine; mohamed lounnas; Hamiche meriem; Amani Hansali; Nemchi Mohamed amine.
+
+Challenge: Harmonization of MODIS and VIIRS Hot Spots
+
+## Project name
+
+Firms: One Comparable Fire History
+
+## Summary
+
+Firms is an open-source web application that turns NASA MODIS and VIIRS observations into a comparable burning activity calendar from 2001 onward. Different sensors detect different numbers of hot pixels, so simply joining their records can create misleading changes in fire activity. We group repeated observations into fire-days and convert the records to a common Aqua reference using seasonal ratios, fire strength, and calibration that gives recent years more weight. Across four study regions, average forward-test error is about 10%, compared with about 21% for a fixed multiplier. Users can explore monthly patterns and unusual conditions, compare methods, inspect detections on an interactive globe, and export results. The application supports Arabic and English. It helps researchers, land managers, and emergency planners examine historical burning patterns while keeping raw observations and method limitations visible.
+
+## Project demonstration
+
+https://github.com/feeefapp/firms/blob/main/docs/submission/firms-seven-slide-demo.pdf
+
+Seven slides, including the title. No login or permission required.
+
+## Project
+
+https://firms.apps.feeef.dev
+
+Source code and reproducibility: https://github.com/feeefapp/firms
+
+## Project details
+
+WHAT IT DOES
+
+Firms creates a monthly burning activity calendar from NASA FIRMS MODIS and VIIRS observations. Users choose a region, examine seasonal patterns, compare a month with its historical baseline, and inspect the underlying detections. The globe shows detection footprints, satellite orbits, and observation times; the comparison view exposes alternative harmonization methods. CSV downloads and a public API support further analysis. The interface supports Arabic and English.
+
+HOW THE METHOD WORKS
+
+We filter low-confidence detections and known static heat sources. A fire-day is one grid cell with at least one detection on a local solar day, using 0.02-degree grid spacing (roughly 2 km, varying with latitude). Each satellite is counted separately during calibration. Terra is converted for the early record, Aqua provides the reference from July 2002 through 2021, and converted VIIRS continues from 2022 as Aqua's observation time drifts.
+
+The selected method averages a learned monthly Aqua-to-VIIRS ratio with a seasonal fire-strength model. The latter estimates how likely Aqua would be to detect a VIIRS cell-day. Calibration gives more influence to recent years, with a two-year half-life. Monthly outputs are Aqua-equivalent fire-days, not counts of distinct physical fires or measurements of burned area.
+
+WHAT WE TESTED AND WHY
+
+We tested fixed multipliers, seasonal ratios, fire-strength curves, fire energy, cloud and observation-time corrections, and machine-learning variants to reduce differences caused by the sensors. We evaluated approximately 7.8 million confidence-filtered detections across Punjab, South Sudan, Portugal, and Bolivia. Hidden-year tests and forward tests check performance on observations excluded from calibration. In forward tests for 2018-2021, the mean of the four regional monthly WAPE scores is about 20.8% for a fixed multiplier, 11.4% for a static ensemble, and 10.0% for the adaptive ensemble. Results vary by region; these figures are not a global accuracy guarantee or a confidence interval.
+
+BENEFITS AND IMPACT
+
+A common reference helps users distinguish sensor changes from changes in burning activity and identify historically critical seasons. Counts and anomalies support historical assessment and planning. Raw detections remain available for detailed inspection. The harmonized calendar is designed for monthly and annual comparisons, not as a replacement for operational fire alerts. Broader regional validation and uncertainty estimates remain future work.
+
+TOOLS AND ORIGINALITY
+
+The implementation combines a Python harmonization pipeline, a Rust/axum API and MCP server, and a React/TypeScript web interface with Three.js satellite and globe visualization. Its contribution is the integration of transparent sensor harmonization, evaluation, a bilingual calendar, raw-observation inspection, and an explanatory interactive guide. An optional AI assistant accesses measured project data through tools; the public calendar, guide, presentation, and source code are available without using the assistant.
+
+AI / SI DISCLOSURE
+
+Claude and OpenAI Codex assisted with code, debugging, analysis interpretation, research, explanatory text, visual layout, and presentation preparation. The app also includes an optional language-model assistant. Scientific fire observations come from NASA FIRMS; they were not generated by AI. NASA Earth textures are sourced imagery, not AI-generated imagery. Demo screenshots show the implemented interface and data-driven charts. Disclosure and resource credits are available in the repository at docs/submission/AI-and-resource-disclosure.md.
+
+## NASA data and resources
+
+- NASA FIRMS MODIS and VIIRS active fire data: https://earthdata.nasa.gov/firms
+- NASA FIRMS archive and API documentation: https://firms.modaps.eosdis.nasa.gov/
+- NASA POWER cloud data used in a tested correction: https://power.larc.nasa.gov/
+- NASA Blue Marble Earth imagery: https://science.nasa.gov/earth/earth-observatory/collections/blue-marble/
+- NASA Black Marble nighttime Earth imagery: https://blackmarble.gsfc.nasa.gov/
+
+## Other data, resources, and tools
+
+- Full resource and AI disclosure: https://github.com/feeefapp/firms/blob/main/docs/submission/AI-and-resource-disclosure.md
+- GOES active fire data via FIRMS, used in the observation-time experiment: https://firms.modaps.eosdis.nasa.gov/
+- CelesTrak satellite orbital elements: https://celestrak.org/
+- React and TypeScript: https://react.dev/ and https://www.typescriptlang.org/
+- Three.js and NASA texture distribution: https://threejs.org/ and https://unpkg.com/three-globe@2.31.0/example/img/
+- satellite.js: https://github.com/shashwatak/satellite-js
+- Natural Earth / world-atlas / topojson-client: https://github.com/topojson/world-atlas and https://github.com/topojson/topojson-client
+- Lucide icons: https://lucide.dev/
+- Space Grotesk and Manrope fonts (SIL OFL): https://github.com/google/fonts
+- Rust, axum, Tokio, and SQLite: https://www.rust-lang.org/ and https://github.com/tokio-rs/axum and https://www.sqlite.org/
+- Python standard library: https://www.python.org/
+- feeef UI and Cloud AI integration; all dependency declarations: https://github.com/feeefapp/firms/blob/main/web/package.json
+- Claude assistance: https://claude.ai/
+- OpenAI Codex assistance: https://openai.com/codex/
+- Full JavaScript and Rust dependency versions: https://github.com/feeefapp/firms/blob/main/web/package-lock.json and https://github.com/feeefapp/firms/blob/main/server/Cargo.lock
+
+## Verification
+
+Terms acceptance and original-work/resource attestations must be confirmed by the participant before final submission. A saved project is not submitted for judging until the website confirms submission.

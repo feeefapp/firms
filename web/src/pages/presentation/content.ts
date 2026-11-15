@@ -8,7 +8,7 @@ export const slides = [
   { id: '6', title: 'Season meets fire strength.', section: 'The selected method' },
   { id: '6A', title: 'Two estimates. One scale.', section: 'Technical detail', technical: true },
   { id: '6B', title: 'Recent years carry more weight.', section: 'Technical detail', technical: true },
-  { id: '7', title: 'Four regions. Real observations.', section: 'The validation' },
+  { id: '7', title: 'Five regions. Real observations.', section: 'The validation' },
   { id: '7A', title: 'How far did we miss?', section: 'Technical detail', technical: true },
   { id: '8', title: 'Around 10% forward-test error.', section: 'The result' },
   { id: '8A', title: 'The instruments disagree, too.', section: 'Technical detail', technical: true },

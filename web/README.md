@@ -47,6 +47,8 @@ textures and an archived sample, so its core content does not need a sign-in or 
   labelled sample of 6,000 real detections from 1 November 2026, rather than a live feed.
 - `src/pages/presentation/study.json` is a checked-in snapshot of the four current regional files.
   The headline is the mean regional forward-test WAPE. `notes.ts` loads only in the presenter chunk.
+  Slide 7 also includes northern Algeria as an additional validation check, using the study box
+  from the app guide. The 7.8M detection total and headline scores still describe the original four regions.
   The simple speaking script is about 230 words across all 15 slides, leaving time for pauses and
   interaction within three minutes. Each note fits its initial slide budget at 110 words per minute.
   Demo action cues are separate from the spoken script; sources stay available for questions.
