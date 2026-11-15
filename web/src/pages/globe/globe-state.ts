@@ -12,6 +12,7 @@
  *   frp=5                            minimum fire radiative power, MW
  *   dn=day | night                   day or night overpasses only
  *   cam=lat,lon,altKm                fly the camera there (applied when it changes)
+ *   look=heat | fire3d               draw fires as a heat map or animated 3D flames (default: pixels)
  *   heat=off                         hide the known heat source icons (volcanoes, flares, platforms)
  *   nostatic=1                       hide the detections at known heat sources
  *   tab=area | record | source       inspector tab
@@ -35,6 +36,7 @@ export type GlobeState = {
   tab: 'area' | 'record' | 'source' | null
   heat: boolean
   nostatic: boolean
+  look: 'pixels' | 'heat' | 'fire3d'
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/
@@ -69,6 +71,7 @@ export function parseGlobe(search: URLSearchParams): GlobeState {
     tab: tab === 'area' || tab === 'record' || tab === 'source' ? tab : null,
     heat: search.get('heat') !== 'off',
     nostatic: search.get('nostatic') === '1',
+    look: search.get('look') === 'heat' ? 'heat' : search.get('look') === 'fire3d' ? 'fire3d' : 'pixels',
   }
 }
 
@@ -89,6 +92,7 @@ export function writeGlobe(search: URLSearchParams, patch: Partial<GlobeState>):
   if ('tab' in patch) set('tab', patch.tab ?? null)
   if ('heat' in patch) set('heat', patch.heat === false ? 'off' : null)
   if ('nostatic' in patch) set('nostatic', patch.nostatic ? '1' : null)
+  if ('look' in patch) set('look', patch.look && patch.look !== 'pixels' ? patch.look : null)
   return next
 }
 

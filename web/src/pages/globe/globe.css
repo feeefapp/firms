@@ -96,28 +96,6 @@
   color: var(--lab-ink);
   pointer-events: none;
 }
-/* The time scrubber floats over the globe just above the dock: no surface, no border. It keeps
-   clear of the card at the leading edge (380 px + the shell gaps). */
-/* The time scrubber floats over the globe above the dock and the card's search bar, across the
-   whole width (the inspector, when open, keeps its column). No surface, no border. It sits under
-   the sheets, so a raised card covers it. */
-.fm-globe-scrub {
-  position: absolute;
-  bottom: calc(2 * var(--lab-toolbar-item, 44px) + 4 * var(--lab-shell-gap, 8px));
-  inset-inline: calc(2 * var(--lab-shell-gap, 8px));
-  z-index: 1;
-  display: grid;
-  gap: 2px;
-  color: #fff;
-}
-.fm-globe[data-pane] .fm-globe-scrub {
-  inset-inline-end: calc(400px + 4 * var(--lab-shell-gap, 8px));
-}
-.fm-globe-scrub .fm-tl-hist {
-  height: 34px;
-  color: #fff;
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
-}
 
 /* The sheets' stage: the globe between the floating app bar and the dock, so the card and the
    inspector never cover them (the kit lays sheets out inside this element). */
@@ -125,21 +103,56 @@
   position: absolute;
   inset-inline: 0;
   top: calc(var(--lab-toolbar-item, 44px) + 2 * var(--lab-shell-gap, 8px));
-  bottom: calc(var(--lab-toolbar-item, 44px) + 2 * var(--lab-shell-gap, 8px));
+  bottom: var(--lab-shell-gap, 8px);
   z-index: 2;
   pointer-events: none;
   container-type: inline-size;
 }
-/* Wide screens: the card and the inspector reach down beside the dock (iPad Maps), and the dock
-   centers in the room between them. */
-.fm-globe[data-wide] .fm-globe-stage {
-  bottom: var(--lab-shell-gap, 8px);
+/* The card lives at the end side (the inspector pane takes the start side). */
+.fm-globe-stage .lab-sheet[data-presentation='card'] {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
 }
-.fm-bleed:has(.fm-globe[data-wide]) .fm-bleed-bottom {
-  padding-inline-start: calc(380px + 2 * var(--lab-shell-gap, 8px));
+/* Card header, always visible (peek included): the scrubber, the actions, the search. */
+.fm-sheet-head {
+  display: grid;
+  gap: var(--lab-shell-gap, 8px);
+  width: 100%;
+  min-width: 0;
+  padding-inline: calc(var(--lab-shell-gap, 8px) / 2);
 }
-.fm-bleed:has(.fm-globe[data-pane]) .fm-bleed-bottom {
-  padding-inline-end: calc(400px + 2 * var(--lab-shell-gap, 8px));
+.fm-sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-shell-gap, 8px);
+  min-width: 0;
+}
+.fm-sheet-actions-gap {
+  flex: 1;
+}
+.fm-scrub {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding-block-start: 4px;
+}
+.fm-scrub .fm-tl-hist {
+  height: 30px;
+}
+.fm-scrub-tip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--lab-ink);
+  color: var(--lab-surface);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
 }
 /* Maps-style search in the card header (it also drags the card). */
 .fm-sheet-search {

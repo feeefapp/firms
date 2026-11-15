@@ -119,6 +119,36 @@ export type HeatSource = {
 }
 export const HEAT_KINDS = ['industrial', 'offshore', 'volcano'] as const
 
+/** How fires are drawn: their real pixels, a heat map, or animated 3D flames. */
+export type Look = 'pixels' | 'heat' | 'fire3d'
+
+/** A low-poly flame: three jittered hexagonal rings and a tip (local y 0 → 1, radius ≤ 1). */
+function flameGeometry() {
+  const rings: [number, number][] = [[0, 1], [0.32, 0.82], [0.62, 0.48]]
+  const N = 6
+  const pts: THREE.Vector3[][] = rings.map(([y, r], k) =>
+    Array.from({ length: N }, (_, i) => {
+      const a = (i / N) * Math.PI * 2 + k * 0.5
+      const j = 1 + ((i * 7 + k * 3) % 5) * 0.06
+      return new THREE.Vector3(Math.cos(a) * r * j, y, Math.sin(a) * r * j)
+    }),
+  )
+  const tip = new THREE.Vector3(0.08, 1, -0.05)
+  const pos: number[] = []
+  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
+  for (let k = 0; k < rings.length - 1; k++)
+    for (let i = 0; i < N; i++) {
+      const a = pts[k][i], b = pts[k][(i + 1) % N], c = pts[k + 1][i], d = pts[k + 1][(i + 1) % N]
+      tri(a, c, b)
+      tri(b, c, d)
+    }
+  const top = pts[rings.length - 1]
+  for (let i = 0; i < N; i++) tri(top[i], tip, top[(i + 1) % N])
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  return g
+}
+
 /**
  * One icon per kind, drawn once: a white disc with a dark ring (readable on the night side, the
  * desert and the ocean alike) and the kind's glyph in its colour.
@@ -274,6 +304,17 @@ export class GlobeEngine {
   private sources: HeatSource[] = []
   private sourceLayers: THREE.Points[] = []
   private sourcesOn = true
+  private look: Look = 'pixels'
+  private fireMesh!: THREE.Mesh
+  private heatScene = new THREE.Scene()
+  private heatRT: THREE.WebGLRenderTarget | null = null
+  private overlayScene = new THREE.Scene()
+  private overlayCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+  private heatU = { tHeat: { value: null as THREE.Texture | null }, uScale: { value: 0.16 } }
+  private flames: THREE.Mesh | null = null
+  private flameKey = ''
+  private flameAt = 0
+  private filterVersion = 0
   private inMask: Uint8Array | null = null
   private outline: THREE.LineSegments
   private disposed = false
@@ -751,6 +792,8 @@ export class GlobeEngine {
     mesh.frustumCulled = false
     mesh.renderOrder = 2
     this.scene.add(mesh)
+    this.fireMesh = mesh
+    this.buildHeat()
   }
 
   // ---------- public controls ----------
@@ -768,6 +811,153 @@ export class GlobeEngine {
   setWindow(seconds: number) {
     this.fireU.uWindow.value = seconds
   }
+  setLook(look: Look) {
+    this.look = look
+    this.flameKey = ''
+  }
+
+  /** Heat map: one soft splat per visible record (FRP-weighted), summed off-screen, then coloured. */
+  private buildHeat() {
+    const vs = `
+      attribute vec3 iC; attribute float aT, aSat, aSys, aConf, aDn, aFrp, aIn;
+      uniform float uTime, uWindow, uGeoWin, uMinConf, uMinFrp, uDn, uUseIn, uSplat; uniform float uMask[16]; uniform vec2 uView;
+      varying vec2 vUv; varying float vW;
+      void main(){
+        float age = uTime - aT;
+        float win = aSys > 2.5 ? min(uWindow, uGeoWin) : uWindow;
+        bool off = age < 0.0 || age > win || uMask[int(aSat + 0.5)] < 0.5 || aConf < uMinConf - 0.5 || aFrp < uMinFrp
+          || (uDn > 0.5 && abs(aDn - uDn) > 0.5) || (uUseIn > 0.5 && aIn < 0.5) || aSys > 2.5
+          || dot(iC, cameraPosition - iC) < 0.0;
+        if (off) { gl_Position = vec4(2.,2.,2.,1.); return; }
+        vec4 c = projectionMatrix * modelViewMatrix * vec4(iC, 1.);
+        c.xy += position.xy * uSplat * 2.0 / uView * c.w;
+        vUv = position.xy;
+        vW = 0.35 + log(1.0 + max(aFrp, 0.0)) * 0.35;
+        gl_Position = c;
+      }`
+    const fs = `varying vec2 vUv; varying float vW;
+      void main(){ float d = dot(vUv, vUv); if (d > 1.) discard; gl_FragColor = vec4(vW * exp(-d * 3.5), 0., 0., 1.); }`
+    const u = this.fireU as Record<string, THREE.IUniform>
+    u.uSplat = { value: 26 * this.renderer.getPixelRatio() }
+    u.uView = { value: new THREE.Vector2(1, 1) }
+    const splats = new THREE.Mesh(
+      this.fireGeo,
+      new THREE.ShaderMaterial({ uniforms: u, vertexShader: vs, fragmentShader: fs, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending }),
+    )
+    splats.frustumCulled = false
+    this.heatScene.add(splats)
+    const quad = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      new THREE.ShaderMaterial({
+        uniforms: this.heatU,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
+        fragmentShader: `uniform sampler2D tHeat; uniform float uScale; varying vec2 vUv;
+          vec3 ramp(float t){
+            vec3 a = vec3(0.35, 0.02, 0.18), b = vec3(0.86, 0.12, 0.08), c = vec3(1.0, 0.55, 0.05), d = vec3(1.0, 0.92, 0.55);
+            return t < 0.33 ? mix(a, b, t / 0.33) : t < 0.66 ? mix(b, c, (t - 0.33) / 0.33) : mix(c, d, (t - 0.66) / 0.34);
+          }
+          void main(){
+            float I = texture2D(tHeat, vUv).r * uScale;
+            float v = 1.0 - exp(-I);
+            float a = smoothstep(0.03, 0.28, v) * 0.92;
+            if (a < 0.01) discard;
+            gl_FragColor = vec4(ramp(v), a);
+          }`,
+      }),
+    )
+    quad.frustumCulled = false
+    this.overlayScene.add(quad)
+  }
+
+  /** 3D fire: visible records clustered on a grid that follows the zoom; bigger, hotter clusters burn taller and brighter. */
+  private updateFlames(alt: number, now: number) {
+    const cellKm = Math.min(500, Math.max(3, (alt * R_KM) / 12))
+    const key = `${Math.round(Math.log(cellKm) * 6)}|${Math.floor(this.simT / 600)}|${this.filterVersion}`
+    if (key === this.flameKey || now - this.flameAt < 250) return
+    this.flameKey = key
+    this.flameAt = now
+    const C = this.D.cols
+    const deg = cellKm / 111.2
+    const W = Math.ceil(360 / deg)
+    const cells = new Map<number, { la: number; lo: number; n: number; frp: number }>()
+    for (let i = 0; i < this.count; i++) {
+      if (!this.isVisible(i) || this.D.sats[C.sat[i]].system === 3) continue
+      const k = Math.floor((C.lat[i] + 90) / deg) * W + Math.floor((C.lon[i] + 180) / deg)
+      let c = cells.get(k)
+      if (!c) cells.set(k, (c = { la: 0, lo: 0, n: 0, frp: 0 }))
+      c.la += C.lat[i]
+      c.lo += C.lon[i]
+      c.n++
+      c.frp += C.frp[i] ?? 1
+    }
+    const list = [...cells.values()].sort((a, b) => b.frp - a.frp).slice(0, 2500)
+    if (this.flames) {
+      this.scene.remove(this.flames)
+      this.flames.geometry.dispose()
+      ;(this.flames.material as THREE.Material).dispose()
+      this.flames = null
+    }
+    if (!list.length) return
+    const base = flameGeometry()
+    const g = new THREE.InstancedBufferGeometry()
+    g.setAttribute('position', base.getAttribute('position'))
+    g.instanceCount = list.length
+    const iP = new Float32Array(list.length * 3), iH = new Float32Array(list.length), iI = new Float32Array(list.length), iS = new Float32Array(list.length)
+    const v = new THREE.Vector3()
+    list.forEach((c, n) => {
+      ll2v(c.la / c.n, c.lo / c.n, 1, v)
+      iP.set([v.x, v.y, v.z], n * 3)
+      const f = Math.min(1, Math.log10(1 + c.frp) / 4) // 1 MW … 10 GW
+      iI[n] = f
+      iH[n] = (cellKm / R_KM) * (0.3 + 1.5 * f)
+      iS[n] = (n * 0.618) % 1
+    })
+    g.setAttribute('iP', new THREE.InstancedBufferAttribute(iP, 3))
+    g.setAttribute('iH', new THREE.InstancedBufferAttribute(iH, 1))
+    g.setAttribute('iI', new THREE.InstancedBufferAttribute(iI, 1))
+    g.setAttribute('iS', new THREE.InstancedBufferAttribute(iS, 1))
+    const mesh = new THREE.Mesh(
+      g,
+      new THREE.ShaderMaterial({
+        uniforms: { uClock: this.flameClock },
+        vertexShader: `
+          attribute vec3 iP; attribute float iH, iI, iS; uniform float uClock;
+          varying float vY; varying float vI; varying vec3 vPos;
+          void main(){
+            vec3 up = normalize(iP);
+            vec3 ax = normalize(abs(up.y) < 0.99 ? cross(vec3(0., 1., 0.), up) : vec3(1., 0., 0.));
+            vec3 az = cross(up, ax);
+            float y = position.y, t = uClock * 2.6 + iS * 6.2832;
+            float sx = (sin(t + y * 3.2) * 0.22 + sin(t * 1.7 + iS * 13.) * 0.08) * y;
+            float sz = cos(t * 1.3 + y * 2.6) * 0.18 * y;
+            float h = iH * (1.0 + 0.14 * sin(t * 2.3 + iS * 7.));
+            float w = iH * 0.3;
+            vec3 world = iP * 1.0002 + ax * (position.x + sx) * w + az * (position.z + sz) * w + up * (y * h);
+            vec4 mv = modelViewMatrix * vec4(world, 1.);
+            vY = y; vI = iI; vPos = mv.xyz;
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: `
+          varying float vY; varying float vI; varying vec3 vPos;
+          void main(){
+            vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));
+            float shade = 0.62 + 0.38 * abs(n.z);
+            vec3 base = mix(vec3(0.78, 0.10, 0.04), vec3(1.0, 0.48, 0.06), smoothstep(0.0, 0.5, vY));
+            vec3 col = mix(base, vec3(1.0, 0.9, 0.42), smoothstep(0.5, 1.0, vY) * (0.5 + 0.5 * vI));
+            gl_FragColor = vec4(col * shade * (0.75 + 0.55 * vI), 1.0);
+          }`,
+      }),
+    )
+    mesh.frustumCulled = false
+    mesh.renderOrder = 3
+    this.scene.add(mesh)
+    this.flames = mesh
+  }
+  private flameClock = { value: 0 }
+
   /** The known heat sources' icons (constant size on screen, hidden behind the Earth). */
   setSources(list: HeatSource[]) {
     for (const p of this.sourceLayers) {
@@ -835,9 +1025,11 @@ export class GlobeEngine {
     this.fireU.uMinConf.value = f.minConf
     this.fireU.uMinFrp.value = f.minFrp
     this.fireU.uDn.value = f.dayNight
+    this.filterVersion++
   }
   /** Records inside an area (one flag per record, in data order), or null for everywhere. */
   setAreaMask(mask: Uint8Array | null) {
+    this.filterVersion++
     this.inMask = mask
     this.fireU.uUseIn.value = mask ? 1 : 0
     if (!mask) return
@@ -1208,6 +1400,12 @@ export class GlobeEngine {
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.fireU.uPx.value = (h * this.renderer.getPixelRatio()) / (2 * Math.tan((this.camera.fov * DEG) / 2))
+    const pr = this.renderer.getPixelRatio()
+    if (this.fireU.uView) (this.fireU.uView.value as THREE.Vector2).set(w * pr, h * pr)
+    this.heatRT?.dispose()
+    // half resolution is plenty for a blurred density
+    this.heatRT = new THREE.WebGLRenderTarget(Math.ceil((w * pr) / 2), Math.ceil((h * pr) / 2), { type: THREE.HalfFloatType })
+    this.heatU.tHeat.value = this.heatRT.texture
   }
 
   private updateSats(tAbs: number) {
@@ -1319,6 +1517,18 @@ export class GlobeEngine {
     // the surface follows the finger at any altitude
     this.controls.rotateSpeed = Math.min(0.5, Math.max(0.0006, alt0 * 0.19))
     this.controls.update()
+    // 3D fire close up: tilt the view toward the horizon so the flames show their height.
+    if (this.look === 'fire3d' && alt0 < 0.35) {
+      const k = Math.min(1, (0.35 - alt0) / 0.25)
+      const up = this.camera.position.clone().normalize()
+      const north = new THREE.Vector3(0, 1, 0).addScaledVector(up, -up.y)
+      if (north.lengthSq() < 1e-6) north.set(1, 0, 0)
+      north.normalize()
+      const target = up.clone().multiplyScalar(Math.cos(alt0 * 1.4 * k)).addScaledVector(north, Math.sin(alt0 * 1.4 * k))
+      this.camera.up.copy(up)
+      this.camera.lookAt(target)
+      this.camera.up.set(0, 1, 0)
+    }
     const alt = this.camera.position.length() - 1
     const near = Math.max(0.00003, alt * 0.3)
     if (Math.abs(near - this.camera.near) / this.camera.near > 0.05) {
@@ -1358,7 +1568,25 @@ export class GlobeEngine {
       o.label.style.display = hidden ? 'none' : ''
       if (!hidden) o.label.style.transform = `translate(${((proj.x + 1) / 2) * w + 10}px, ${((1 - proj.y) / 2) * h - 8}px)`
     }
+    this.flameClock.value = now / 1000
+    this.fireMesh.visible = this.look === 'pixels'
+    if (this.look === 'fire3d') this.updateFlames(alt, now)
+    if (this.flames) this.flames.visible = this.look === 'fire3d'
+    if (this.look === 'heat' && this.heatRT) {
+      this.fireU.uSplat.value = (alt < 0.05 ? 34 : alt < 0.5 ? 28 : 22) * this.renderer.getPixelRatio()
+      this.renderer.setRenderTarget(this.heatRT)
+      this.renderer.setClearColor(0x000000, 0)
+      this.renderer.clear()
+      this.renderer.render(this.heatScene, this.camera)
+      this.renderer.setRenderTarget(null)
+      this.renderer.setClearColor(0x000000, 1)
+    }
     this.renderer.render(this.scene, this.camera)
+    if (this.look === 'heat') {
+      this.renderer.autoClear = false
+      this.renderer.render(this.overlayScene, this.overlayCam)
+      this.renderer.autoClear = true
+    }
     if (now - this.lastTick > 120) {
       this.lastTick = now
       this.cb.onTick(this.simT, this.playing)

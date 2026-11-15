@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Tooltip from '@radix-ui/react-tooltip'
@@ -28,7 +28,7 @@ import { ChatBottom, ChatThread, useChatSurface } from '@/components/chat/thread
 import { linkWithParams } from '@/lib/params'
 import { t } from '@/i18n/locale'
 import { isActive, navItems } from './navigation'
-import { ScreenHostsContext, ShellAppBarContext } from './screen-slots'
+import { ScreenHostsContext, ShellActionsContext, ShellAppBarContext } from './screen-slots'
 import '@feeef.dev/ui/navigation/navigation-item.css'
 import '@feeef.dev/ui/account/profile-menu.css'
 import '@feeef.dev/ui/actions/actions.css'
@@ -50,6 +50,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [dock, setDock] = useState<HTMLElement | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const chatButton = useRef<HTMLButtonElement>(null)
+  // The page that opened the assistant (the globe's card) lends its button for the morph.
+  const chatSource = useRef<RefObject<HTMLElement | null> | null>(null)
+  const actions = useMemo(
+    () => ({
+      openAssistant: (source?: RefObject<HTMLElement | null>) => {
+        chatSource.current = source ?? null
+        setChatOpen(true)
+      },
+    }),
+    [],
+  )
   const fullBleed = pathname === '/globe'
   const onAssistant = pathname === '/assistant'
   const current = navItems().find((item) => isActive(pathname, item))
@@ -90,6 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <Tooltip.Provider delayDuration={250}>
       <ScreenHostsContext.Provider value={{ top, dock }}>
+      <ShellActionsContext.Provider value={actions}>
         <div className="fm-host">
           <Scaffold
             className="fm-scaffold"
@@ -102,7 +114,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             contentLabel={current?.label ?? t('m.shell.content')}
             side={<Side />}
             appBar={appBar}
-            bottom={onAssistant ? undefined : bottom}
+            // The globe carries its actions (assistant included) in its own sheet.
+            bottom={onAssistant || fullBleed ? undefined : bottom}
             renderViewport={(chrome) =>
               onAssistant ? (
                 <ShellAppBarContext.Provider value={chrome.appBar}>
@@ -124,7 +137,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             {children}
           </Scaffold>
         </div>
-        <AssistantSheet open={chatOpen} onClose={() => setChatOpen(false)} source={chatButton} />
+        <AssistantSheet
+          open={chatOpen}
+          onClose={() => {
+            setChatOpen(false)
+            chatSource.current = null
+          }}
+          source={(chatSource.current as RefObject<HTMLButtonElement | null> | null) ?? chatButton}
+        />
+      </ShellActionsContext.Provider>
       </ScreenHostsContext.Provider>
     </Tooltip.Provider>
   )

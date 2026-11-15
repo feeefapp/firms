@@ -1,3 +1,4 @@
+import type React from 'react'
 import { createContext, useContext, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ToolbarGroup } from '@feeef.dev/ui/toolbar'
@@ -38,3 +39,8 @@ export function ScreenTitle({ title, children }: { title: string; children?: Rea
  * composer floats at the bottom of its own `ScrollArea`, the app bar at its top).
  */
 export const ShellAppBarContext = createContext<ReactNode>(null)
+
+/** Shell actions a page can trigger: open the assistant sheet, growing out of the page's own button. */
+export type ShellActions = { openAssistant: (source?: React.RefObject<HTMLElement | null>) => void }
+export const ShellActionsContext = createContext<ShellActions>({ openAssistant: () => {} })
+export const useShellActions = () => useContext(ShellActionsContext)

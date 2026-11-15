@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BoxSelect, Clock, Download, Earth, Flag, Flame, MapPinned, Pause, Play, Search, Trash2, X, ZoomIn } from 'lucide-react'
+import { BoxSelect, Clock, Download, Earth, Flag, Flame, MapPinned, Pause, Play, Search, Sparkles, Trash2, X, ZoomIn } from 'lucide-react'
 import { Button, IconButton } from '@feeef.dev/ui/primitives/button'
 import { SegmentedControl } from '@feeef.dev/ui/primitives/segmented'
 import { Slider } from '@feeef.dev/ui/primitives/slider'
@@ -19,7 +19,7 @@ import { api, ApiError, type Job } from '@/lib/api'
 import { errorMessage } from '@/lib/errors'
 import { formatDate, formatNumber } from '@/lib/format'
 import { setPageContext } from '@/lib/page-context'
-import { ScreenDock, ScreenTop } from '@/shell/screen-slots'
+import { ScreenTop, useShellActions } from '@/shell/screen-slots'
 import { dir, t } from '@/i18n/locale'
 import { GlobeEngine, HEAT_KINDS, heatIconUrl, SYSTEM_COLORS, type DayData, type DaySat, type HeatSource, type PickedRecord, type Stats } from './engine'
 import { countryMask, heatMask, loadCountries, outlineOf, type CountryShape } from './countries'
@@ -110,6 +110,8 @@ export default function GlobePage() {
   )
   const [stage, setStage] = useState<HTMLDivElement | null>(null)
   const [query, setQuery] = useState('')
+  const askButton = useRef<HTMLButtonElement>(null)
+  const { openAssistant } = useShellActions()
   // From the kit's regular breakpoint the card sits at the side, so the scrubber floats above the
   // dock; below it the card is a bottom sheet over the dock and keeps the scrubber inside.
   const [wide, setWide] = useState(false)
@@ -265,6 +267,9 @@ export default function GlobePage() {
   useEffect(() => {
     if (ready) engine.current?.setSourcesVisible(g.heat)
   }, [ready, g.heat])
+  useEffect(() => {
+    if (ready) engine.current?.setLook(g.look)
+  }, [ready, g.look])
 
   const flewCountry = useRef<string | null>(null)
   useEffect(() => {
@@ -334,7 +339,7 @@ export default function GlobePage() {
   }, [data, country, stats, sats, picked, spots, source, g.heat, g.nostatic])
 
   // ---------- filter bar ----------
-  const [pinned, setPinned] = useState<string[]>(['day', 'range', 'country', 'frp', 'heat:show', 'sensor:viirs', 'sensor:modis'])
+  const [pinned, setPinned] = useState<string[]>(['look', 'day', 'range', 'country', 'frp', 'heat:show', 'sensor:viirs', 'sensor:modis'])
   const shownDay = data && !data.range ? data.window[0] : (g.date ?? null)
   const options = useMemo<FilterOption[]>(() => {
     // Sensors and satellites are on/off filters: any that are on are shown, none on shows all.
@@ -370,6 +375,17 @@ export default function GlobePage() {
       },
       { id: 'range', label: t('m.globe.range'), description: t('m.globe.pickRangeHint'), type: 'dateRange', min: '2000-11-01', max: today() },
       { id: 'country', label: t('m.globe.country'), description: t('m.globe.searchAbove'), type: 'enum', choices: (countries ?? []).map((c) => ({ value: c.code, label: c.name })) },
+      {
+        id: 'look',
+        label: t('m.look.title'),
+        description: t('m.look.hint'),
+        type: 'enum',
+        choices: [
+          { value: 'pixels', label: t('m.look.pixels') },
+          { value: 'heat', label: t('m.look.heat') },
+          { value: 'fire3d', label: t('m.look.fire3d') },
+        ],
+      },
       { id: 'conf', label: t('m.globe.confidence'), type: 'enum', choices: [{ value: '1', label: t('m.conf.nominal') }, { value: '2', label: t('m.conf.high') }] },
       {
         id: 'frp',
@@ -392,6 +408,7 @@ export default function GlobePage() {
     conf: g.conf ? String(g.conf) : null,
     frp: g.frp ? String(g.frp) : null,
     dn: g.dn === 1 ? 'day' : g.dn === 2 ? 'night' : null,
+    look: g.look,
   }
   const onValues = (next: Record<string, FilterValue>) => {
     const str = (v: FilterValue) => (typeof v === 'string' && v ? v : null)
@@ -409,6 +426,7 @@ export default function GlobePage() {
     }
     if (str(next.conf) !== values.conf) p.conf = (Number(str(next.conf)) || 0) as 0 | 1 | 2
     if (str(next.frp) !== values.frp) p.frp = Number(str(next.frp)) || 0
+    if (str(next.look) !== values.look) p.look = (str(next.look) as GlobeState['look'] | null) ?? 'pixels'
     if (str(next.dn) !== values.dn) p.dn = str(next.dn) === 'day' ? 1 : str(next.dn) === 'night' ? 2 : 0
     if (Object.keys(p).length) patch(p, 'range' in p || 'date' in p || 'country' in p)
   }
@@ -491,35 +509,6 @@ export default function GlobePage() {
           }
         />
       </ScreenTop>
-      <ScreenDock>
-        <ToolbarGroup label={t('m.globe.timeline')}>
-          <IconButton variant="text" appearance="toolbar" aria-label={playing ? t('m.globe.pause') : t('m.globe.play')} disabled={!ready} onClick={() => {
-            engine.current?.setPlaying(!playing)
-            setPlaying(!playing)
-          }}>
-            {playing ? <Pause /> : <Play />}
-          </IconButton>
-          <span className="fm-dock-clock" dir="ltr">{clock}</span>
-        </ToolbarGroup>
-        {drawing ? (
-          <Button
-            variant="tonal"
-            onClick={() => {
-              engine.current?.setDrawing(false)
-              engine.current?.setBox(g.bbox)
-              setDrawing(0)
-            }}
-          >
-            <X aria-hidden />
-            <span className="lab-control-label">{t('m.globe.cancelBox')}</span>
-          </Button>
-        ) : (
-          <Button variant={inspectorOpen ? 'tonal' : 'filled'} disabled={!ready} onClick={startDrawing}>
-            <BoxSelect aria-hidden />
-            <span className="lab-control-label">{t('m.globe.drawBox')}</span>
-          </Button>
-        )}
-      </ScreenDock>
 
       {!data || load.state === 'error' ? (
         <div className="fm-globe-overlay">
@@ -546,13 +535,8 @@ export default function GlobePage() {
         </div>
       ) : null}
 
-      {wide && ready && e ? (
-        <section className="fm-globe-scrub" data-pane={inspectorOpen || undefined} aria-label={t('m.globe.timeline')}>
-          <Scrubber engine={e} simT={simT} isRange={isRange} onSeek={seek} span={span} at={at} />
-        </section>
-      ) : null}
 
-      {/* The sheets' stage: the globe between the floating app bar and the dock. */}
+      {/* The sheets' stage: the globe below the floating app bar. */}
       <div ref={setStage} className="fm-globe-stage" />
       {stage ? (
         <>
@@ -566,8 +550,56 @@ export default function GlobePage() {
             dismissible={false}
             backgroundInteraction="medium"
             regular="card"
+            cardWidth={420}
             modal={false}
-            header={<ExploreSearch value={query} onChange={setQuery} placeholder={country ? country.name : t('m.globe.searchPlace')} />}
+            className="fm-globe-card-sheet"
+            header={
+              <div className="fm-sheet-head" data-lab-sheet-handle="">
+                {ready && e ? <Scrubber engine={e} simT={simT} isRange={isRange} onSeek={seek} span={span} at={at} /> : null}
+                <div className="fm-sheet-actions">
+                  <ToolbarGroup label={t('m.globe.timeline')}>
+                    <IconButton
+                      variant="text"
+                      appearance="toolbar"
+                      aria-label={playing ? t('m.globe.pause') : t('m.globe.play')}
+                      disabled={!ready}
+                      onClick={() => {
+                        engine.current?.setPlaying(!playing)
+                        setPlaying(!playing)
+                      }}
+                    >
+                      {playing ? <Pause /> : <Play />}
+                    </IconButton>
+                    <span className="fm-dock-clock" dir="ltr">
+                      {clock}
+                    </span>
+                  </ToolbarGroup>
+                  <span className="fm-sheet-actions-gap" />
+                  <IconButton ref={askButton} variant="tonal" aria-label={t('m.shell.askAssistant')} onClick={() => openAssistant(askButton)}>
+                    <Sparkles />
+                  </IconButton>
+                  {drawing ? (
+                    <Button
+                      variant="tonal"
+                      onClick={() => {
+                        engine.current?.setDrawing(false)
+                        engine.current?.setBox(g.bbox)
+                        setDrawing(0)
+                      }}
+                    >
+                      <X aria-hidden />
+                      {t('m.globe.cancelBox')}
+                    </Button>
+                  ) : (
+                    <Button variant={inspectorOpen ? 'tonal' : 'filled'} disabled={!ready} onClick={startDrawing}>
+                      <BoxSelect aria-hidden />
+                      {t('m.globe.drawBox')}
+                    </Button>
+                  )}
+                </div>
+                <ExploreSearch value={query} onChange={setQuery} placeholder={country ? country.name : t('m.globe.searchPlace')} />
+              </div>
+            }
           >
             {query.trim() ? (
               <SearchResults
@@ -618,7 +650,7 @@ export default function GlobePage() {
                       onSeek={seek}
                       span={span}
                       at={at}
-                      scrubber={!wide}
+                      scrubber={false}
                     />
                   ) : null
                 }
@@ -633,6 +665,7 @@ export default function GlobePage() {
             container={stage}
             regular="pane"
             paneWidth={400}
+            paneSide="start"
             modal={false}
             title={tabs.length > 1 ? undefined : tab === 'source' && source ? (source.name ?? t(`m.heat.kind.${source.kind}`)) : tab === 'area' ? t('m.globe.tabArea') : t('m.globe.record')}
             leading={
@@ -710,7 +743,7 @@ export default function GlobePage() {
 /** The card's header: a search field that also drags the card (Maps). */
 function ExploreSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <div className="fm-sheet-search" data-lab-sheet-handle="">
+    <div className="fm-sheet-search">
       <TextField variant="tonal" placeholder={placeholder} aria-label={t('m.globe.searchPlace')} leadingIcon={<Search size={18} />} value={value} onValueChange={onChange} autoComplete="off" />
     </div>
   )
@@ -891,23 +924,31 @@ function Timeline({
   )
 }
 
-/** Detections over time and the time slider. */
+/** Detections over time and the time slider; hovering shows the date and time under the pointer. */
 function Scrubber({ engine, simT, isRange, onSeek, span, at }: { engine: GlobeEngine; simT: number; isRange: boolean; onSeek: (t: number) => void; span: number; at: (v: number) => string }) {
+  const [hover, setHover] = useState<{ x: number; label: string } | null>(null)
+  const [hoverWidth, setHoverWidth] = useState(0)
+  const label = (v: number) => (isRange ? `${formatDate(at(v).slice(0, 10))} ${at(v).slice(11, 16)} UTC` : `${at(v).slice(11, 16)} UTC`)
   return (
-    <>
+    <div
+      className="fm-scrub"
+      onPointerMove={(ev) => {
+        const r = ev.currentTarget.getBoundingClientRect()
+        const p = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width))
+        const v = (dir === 'rtl' ? 1 - p : p) * (span + 600) - 600
+        setHoverWidth(r.width)
+        setHover({ x: ev.clientX - r.left, label: label(v) })
+      }}
+      onPointerLeave={() => setHover(null)}
+    >
       <Histogram engine={engine} simT={simT} onSeek={onSeek} />
-      <Slider
-        label={t('m.globe.time')}
-        trackStyle="thin"
-        controlSize="small"
-        min={-600}
-        max={Math.round(span)}
-        step={isRange ? 600 : 10}
-        value={simT}
-        onValueChange={onSeek}
-        getValueText={(v) => (isRange ? `${at(v).slice(0, 10)} ${at(v).slice(11, 16)} UTC` : `${at(v).slice(11, 16)} UTC`)}
-      />
-    </>
+      <Slider label={t('m.globe.time')} trackStyle="thin" controlSize="small" min={-600} max={Math.round(span)} step={isRange ? 600 : 10} value={simT} onValueChange={onSeek} getValueText={label} />
+      {hover ? (
+        <span className="fm-scrub-tip" style={{ left: Math.min(Math.max(hover.x, 70), (hoverWidth || 9999) - 70) }} role="status" dir="ltr">
+          {hover.label}
+        </span>
+      ) : null}
+    </div>
   )
 }
 
