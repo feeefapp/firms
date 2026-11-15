@@ -26,7 +26,7 @@ function Audience() {
   })
   const [state, setState] = useState<PresentationState>(() => {
     const index = Math.max(0, slides.findIndex(s => s.id === window.location.hash.slice(1)))
-    try { return restorePresentation(sessionStorage.getItem(`firms-pacing:${room}`), index) }
+    try { return restorePresentation(sessionStorage.getItem(`firms-pacing:${PRESENTATION_MS}:${room}`), index) }
     catch { return restorePresentation(null, index) }
   })
   const [overview, setOverview] = useState(false)
@@ -76,7 +76,7 @@ function Audience() {
 
   useEffect(() => {
     channel.current?.send({ type: 'state', state })
-    try { sessionStorage.setItem(`firms-pacing:${room}`, JSON.stringify(state)) } catch { /* Live timing still works without storage. */ }
+    try { sessionStorage.setItem(`firms-pacing:${PRESENTATION_MS}:${room}`, JSON.stringify(state)) } catch { /* Live timing still works without storage. */ }
     const url = new URL(window.location.href)
     url.hash = slides[state.index].id
     window.history.replaceState(window.history.state, '', url)

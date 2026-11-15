@@ -1,8 +1,8 @@
 import { neighbour, slides, visibleIndexes, type PresentationState } from './content.ts'
 
-export const PRESENTATION_MS = 180_000
+export const PRESENTATION_MS = 300_000
 // Relative speaking effort: opening, explanation, technical details, results, and live demo.
-// Main-slide weights total 180 seconds. Enabling technical slides redistributes the same 180s.
+// These are relative weights. Every enabled slide shares the same five-minute total.
 export const SLIDE_WEIGHTS = [10, 18, 15, 15, 8, 22, 23, 12, 8, 20, 9, 20, 9, 28, 9] as const
 
 /** Largest-remainder allocation preserves the exact millisecond total without minimum-time inflation. */
