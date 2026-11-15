@@ -519,6 +519,7 @@ On the globe (page \"globe\"): `date` shows one day (last 60 days) with satellit
                 "clear_bbox": { "type": "boolean", "description": "Globe: remove the drawn area" },
                 "heat_sources": { "type": "boolean", "description": "Globe: show or hide the icons of known heat sources (volcanoes, gas flares and industry, offshore platforms)" },
                 "hide_heat_source_detections": { "type": "boolean", "description": "Globe: leave out the fire pixels at known heat sources" },
+                "look": { "type": "string", "enum": ["pixels", "heat", "fire3d"], "description": "Globe: draw fires as their real pixels, a heat map, or animated 3D flames" },
             }), &[]),
             output: obj(json!({ "applied": { "type": "object" } }), &["applied"]),
             read_only: true,
@@ -705,6 +706,12 @@ pub fn validate_view(st: &AppState, a: &Value) -> AppResult<Value> {
     }
     if a.get("clear_bbox").and_then(Value::as_bool) == Some(true) {
         out.insert("clear_bbox".into(), json!(true));
+    }
+    if let Some(v) = str_arg(a, "look") {
+        if !["pixels", "heat", "fire3d"].contains(&v.as_str()) {
+            return Err(AppError::bad("look must be pixels, heat or fire3d"));
+        }
+        out.insert("look".into(), json!(v));
     }
     for k in ["heat_sources", "hide_heat_source_detections"] {
         if let Some(b) = a.get(k).and_then(Value::as_bool) {

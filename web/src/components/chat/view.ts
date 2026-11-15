@@ -60,6 +60,8 @@ export function viewHref(view: FirmsView, current: { pathname: string; search: s
   }
   if (view.day_night === 'day' || view.day_night === 'night') next.set('dn', view.day_night)
   else if (view.day_night === 'all') next.delete('dn')
+  if (view.look === 'heat' || view.look === 'fire3d') next.set('look', view.look)
+  else if (view.look === 'pixels') next.delete('look')
   if (view.heat_sources === false) next.set('heat', 'off')
   else if (view.heat_sources === true) next.delete('heat')
   if (view.hide_heat_source_detections === true) next.set('nostatic', '1')

@@ -80,6 +80,7 @@ export type FirmsView = {
   clear_bbox?: boolean
   heat_sources?: boolean
   hide_heat_source_detections?: boolean
+  look?: 'pixels' | 'heat' | 'fire3d'
 }
 
 export type FirmsCardKind = 'calendar' | 'anomalies' | 'trend' | 'hotspots' | 'compare' | 'ranking'

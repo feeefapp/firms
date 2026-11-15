@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
-import { BoxSelect, Clock, Download, Earth, Flag, Flame, MapPinned, Pause, Play, Search, Sparkles, Trash2, X, ZoomIn } from 'lucide-react'
+import { BoxSelect, Clock, Download, Earth, Flag, Flame, Grid2x2, MapPinned, Pause, Play, Search, Sparkles, Trash2, Waves, X, ZoomIn } from 'lucide-react'
 import { Button, IconButton } from '@feeef.dev/ui/primitives/button'
 import { SegmentedControl } from '@feeef.dev/ui/primitives/segmented'
 import { Slider } from '@feeef.dev/ui/primitives/slider'
 import { NumberField } from '@feeef.dev/ui/primitives/number-field'
+import { Checkbox } from '@feeef.dev/ui/primitives/choice'
 import { ListRow, ListSection } from '@feeef.dev/ui/primitives/list'
 import { TextField } from '@feeef.dev/ui/primitives/text-field'
 import { ToolbarGroup } from '@feeef.dev/ui/toolbar'
@@ -602,6 +603,17 @@ export default function GlobePage() {
                     </Button>
                   )}
                 </div>
+                <SegmentedControl
+                  label={t('m.look.title')}
+                  equalWidth
+                  value={g.look}
+                  onChange={(v) => patch({ look: v })}
+                  options={[
+                    { value: 'pixels', label: t('m.look.pixels'), icon: <Grid2x2 size={16} /> },
+                    { value: 'heat', label: t('m.look.heat'), icon: <Waves size={16} /> },
+                    { value: 'fire3d', label: t('m.look.fire3d'), icon: <Flame size={16} /> },
+                  ]}
+                />
                 <ExploreSearch value={query} onChange={setQuery} placeholder={country ? country.name : t('m.globe.searchPlace')} />
               </div>
             }
@@ -634,7 +646,11 @@ export default function GlobePage() {
                 isRange={isRange}
                 onSpot={(h) => engine.current?.flyToView({ lat: h.lat, lon: h.lon, altKm: isRange ? 120 : 60 })}
                 rangeNeedsArea={Boolean(g.range && !area)}
-                heat={g.heat ? heat : []}
+                heat={heat}
+                heatShown={g.heat}
+                heatHidden={g.nostatic}
+                onHeatShown={(on) => patch({ heat: on })}
+                onHeatHidden={(on) => patch({ nostatic: on })}
                 onHeat={(kind) => {
                   const list = heat.filter((h) => h.kind === kind)
                   const best = list[0]
@@ -836,6 +852,10 @@ function Explore({
   timeline,
   heat,
   onHeat,
+  heatShown,
+  heatHidden,
+  onHeatShown,
+  onHeatHidden,
 }: {
   periodLabel: string
   data?: DayData
@@ -851,6 +871,10 @@ function Explore({
   timeline: React.ReactNode
   heat: HeatSource[]
   onHeat: (kind: HeatSource['kind']) => void
+  heatShown: boolean
+  heatHidden: boolean
+  onHeatShown: (on: boolean) => void
+  onHeatHidden: (on: boolean) => void
 }) {
   const sheet = useSheet()
   if (sheet?.detent === 'peek') return null
@@ -861,6 +885,18 @@ function Explore({
   return (
     <>
       {rangeNeedsArea ? <Notice tone="warning">{t('m.globe.rangeNeedsArea')}</Notice> : null}
+      {heat.length ? (
+        <ListSection header={t('m.look.display')}>
+          <ListRow
+            static
+            leading={<img src={heatIconUrl('industrial')} alt="" width={22} height={22} />}
+            title={t('m.heat.show')}
+            subtitle={t('m.heat.zoomHint')}
+            trailing={<Checkbox aria-label={t('m.heat.show')} checked={heatShown} onCheckedChange={onHeatShown} />}
+          />
+          <ListRow static title={t('m.heat.hide')} subtitle={t('m.heat.hideHint')} trailing={<Checkbox aria-label={t('m.heat.hide')} checked={heatHidden} onCheckedChange={onHeatHidden} />} />
+        </ListSection>
+      ) : null}
       {data?.note ? <Notice tone="info">{data.note}</Notice> : null}
       <ListSection header={periodLabel} footer={data?.truncated ? t('m.globe.truncated') : undefined}>
         <ListRow static leading={<Flame size={18} aria-hidden />} title={t('m.globe.visible')} trailing={stats ? formatNumber(stats.total) : '…'} />
@@ -884,7 +920,7 @@ function Explore({
           <ListRow static title={t('m.globe.noSpots')} />
         )}
       </ListSection>
-      {heat.length ? (
+      {heat.length && heatShown ? (
         <ListSection header={t('m.heat.title')} footer={t('m.heat.legendHint')}>
           {HEAT_KINDS.map((kind) => {
             const n = heat.filter((h) => h.kind === kind).length

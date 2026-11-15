@@ -150,67 +150,66 @@ function flameGeometry() {
 }
 
 /**
- * One icon per kind, drawn once: a white disc with a dark ring (readable on the night side, the
- * desert and the ocean alike) and the kind's glyph in its colour.
+ * One gizmo per kind, drawn once (editor-style line icons): a thin coloured stroke over a dark
+ * halo, no fill, so it reads on the night side, the desert and the sea without hiding the map.
  */
 function iconCanvas(kind: HeatSource['kind']) {
-  const S = 128
+  const S = 96
   const c = document.createElement('canvas')
   c.width = c.height = S
   const g = c.getContext('2d')!
   const m = S / 2
-  g.shadowColor = 'rgba(0,0,0,0.55)'
-  g.shadowBlur = 10
-  g.beginPath()
-  g.arc(m, m, 46, 0, Math.PI * 2)
-  g.fillStyle = '#ffffff'
-  g.fill()
-  g.shadowBlur = 0
-  g.lineWidth = 7
-  g.strokeStyle = '#141a20'
-  g.stroke()
   g.lineJoin = 'round'
   g.lineCap = 'round'
-  const flame = (x: number, y: number, h: number, color: string) => {
+  const color = kind === 'volcano' ? '#ff6a4d' : kind === 'industrial' ? '#ffb02e' : '#4fd2ff'
+  const path = () => {
     g.beginPath()
-    g.moveTo(x, y - h)
-    g.bezierCurveTo(x + h * 0.55, y - h * 0.45, x + h * 0.5, y, x, y)
-    g.bezierCurveTo(x - h * 0.5, y, x - h * 0.55, y - h * 0.45, x, y - h)
-    g.fillStyle = color
-    g.fill()
+    if (kind === 'volcano') {
+      // cone with a crater and two plume strokes
+      g.moveTo(m - 30, m + 26)
+      g.lineTo(m - 9, m - 8)
+      g.lineTo(m + 9, m - 8)
+      g.lineTo(m + 30, m + 26)
+      g.closePath()
+      g.moveTo(m - 4, m - 16)
+      g.quadraticCurveTo(m - 10, m - 24, m - 4, m - 32)
+      g.moveTo(m + 5, m - 16)
+      g.quadraticCurveTo(m + 11, m - 24, m + 5, m - 32)
+    } else if (kind === 'industrial') {
+      // a stack with a flame outline on top
+      g.moveTo(m - 9, m + 28)
+      g.lineTo(m - 9, m - 2)
+      g.lineTo(m + 9, m - 2)
+      g.lineTo(m + 9, m + 28)
+      g.moveTo(m - 22, m + 28)
+      g.lineTo(m + 22, m + 28)
+      g.moveTo(m, m - 34)
+      g.bezierCurveTo(m + 13, m - 22, m + 10, m - 8, m, m - 8)
+      g.bezierCurveTo(m - 10, m - 8, m - 13, m - 22, m, m - 34)
+    } else {
+      // a platform deck on legs over a wave, with a flame
+      g.moveTo(m - 26, m + 4)
+      g.lineTo(m + 26, m + 4)
+      g.moveTo(m - 17, m + 4)
+      g.lineTo(m - 21, m + 26)
+      g.moveTo(m + 17, m + 4)
+      g.lineTo(m + 21, m + 26)
+      g.moveTo(m - 30, m + 20)
+      g.quadraticCurveTo(m - 15, m + 14, m, m + 20)
+      g.quadraticCurveTo(m + 15, m + 26, m + 30, m + 20)
+      g.moveTo(m + 8, m - 26)
+      g.bezierCurveTo(m + 17, m - 17, m + 15, m - 6, m + 8, m - 6)
+      g.bezierCurveTo(m + 1, m - 6, m - 1, m - 17, m + 8, m - 26)
+    }
   }
-  if (kind === 'volcano') {
-    g.beginPath()
-    g.moveTo(m - 30, m + 24)
-    g.lineTo(m - 9, m - 10)
-    g.lineTo(m - 3, m - 4)
-    g.lineTo(m + 3, m - 10)
-    g.lineTo(m + 9, m - 10)
-    g.lineTo(m + 30, m + 24)
-    g.closePath()
-    g.fillStyle = '#7a3b2e'
-    g.fill()
-    flame(m, m - 8, 20, '#e8452f')
-  } else if (kind === 'industrial') {
-    g.fillStyle = '#3a4048'
-    g.fillRect(m - 6, m - 4, 12, 30)
-    flame(m, m - 4, 30, '#f08a1c')
-    flame(m, m - 6, 15, '#ffd25a')
-  } else {
-    g.strokeStyle = '#1f5fae'
-    g.lineWidth = 6
-    g.beginPath()
-    g.moveTo(m - 24, m + 2)
-    g.lineTo(m + 24, m + 2)
-    g.moveTo(m - 16, m + 2)
-    g.lineTo(m - 20, m + 26)
-    g.moveTo(m + 16, m + 2)
-    g.lineTo(m + 20, m + 26)
-    g.moveTo(m - 28, m + 18)
-    g.quadraticCurveTo(m, m + 12, m + 28, m + 18)
-    g.stroke()
-    flame(m + 6, m - 2, 22, '#f08a1c')
-  }
+  path()
+  g.strokeStyle = 'rgba(8,10,14,0.85)'
+  g.lineWidth = 12
+  g.stroke()
+  path()
+  g.strokeStyle = color
+  g.lineWidth = 5
+  g.stroke()
   return c
 }
 const iconUrls = new Map<string, string>()
@@ -981,7 +980,7 @@ export class GlobeEngine {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
       const layer = new THREE.Points(
         geo,
-        new THREE.PointsMaterial({ map: iconTexture(kind), size: 22, sizeAttenuation: false, transparent: true, alphaTest: 0.05, depthWrite: false }),
+        new THREE.PointsMaterial({ map: iconTexture(kind), size: 16, sizeAttenuation: false, transparent: true, alphaTest: 0.02, depthWrite: false }),
       )
       layer.renderOrder = 9
       layer.frustumCulled = false
@@ -999,7 +998,7 @@ export class GlobeEngine {
     const v = new THREE.Vector3()
     const cam = this.camera.position
     let best: HeatSource | null = null
-    let bd = 18
+    let bd = 14
     for (const s of this.sources) {
       ll2v(s.lat, s.lon, 1, v)
       if (v.dot(cam) - 1 < 0) continue
@@ -1538,8 +1537,9 @@ export class GlobeEngine {
     if (this.selGroup.visible) this.ring.scale.setScalar(Math.max(alt * 0.012, 0.00004))
     this.tiles.update(this.camera, this.view.clientWidth, this.view.clientHeight)
     // Icons appear from about a continent's view down, growing a little as you zoom in.
-    const iconsOn = this.sourcesOn && alt < 1.2
-    const px = (alt > 0.4 ? 18 : alt > 0.08 ? 22 : 28) * this.renderer.getPixelRatio()
+    // Gizmos appear from a country's view (~2,500 km) down, small, growing a little close up.
+    const iconsOn = this.sourcesOn && alt < 0.4
+    const px = (alt > 0.15 ? 14 : alt > 0.03 ? 17 : 21) * this.renderer.getPixelRatio()
     for (const l of this.sourceLayers) {
       l.visible = iconsOn
       ;(l.material as THREE.PointsMaterial).size = px
