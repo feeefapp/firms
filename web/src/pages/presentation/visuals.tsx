@@ -149,11 +149,19 @@ export function ValidationTimeline() {
   </div>
 }
 
-export function Results() {
-  const [region, setRegion] = useState<Region | 'average'>('average')
+export type ResultsRegion = Region | 'average' | 'algeria'
+// Northern study box used on slide 7; the guide documents these forward-test scores.
+// This snapshot differs from data/regions/algeria.json, which covers a larger country box.
+export const algeriaResults = { fixed: 34.2, ensemble: 17.5, frp: 12.8 } as const
+
+export function Results({ region, onChange }: { region: ResultsRegion; onChange: (region: ResultsRegion) => void }) {
+  const algeria = region === 'algeria'
   const values = (r: Region) => [study[r].eval.ratio.forward, study[r].eval.ensemble.forward, study[r].eval.ensemble.forward_adaptive]
-  const data = region === 'average' ? [0, 1, 2].map(i => studyRegions.reduce((a, r) => a + values(r)[i], 0) / 4) : values(region)
-  return <div className="mission-results"><div className="mission-region-picker"><button aria-pressed={region === 'average'} onClick={() => setRegion('average')}>Four-region average</button>{studyRegions.map(r => <button key={r} aria-pressed={r === region} onClick={() => setRegion(r)}>{regionNames[r]}</button>)}</div><div className="mission-result-bars">{['Fixed multiplier', 'Static ensemble', 'Adaptive ensemble'].map((name, i) => <div className={i === 2 ? 'is-selected' : ''} key={name}><span>{name}</span><div><i style={{ width: `${data[i] / 40 * 100}%` } as CSSProperties} /><strong>{data[i].toFixed(1)}%</strong></div></div>)}</div><div className="mission-result-axis"><span>0%</span><span>20%</span><span>40% WAPE</span></div><p className="mission-footnote">Test years 2018–2021. Lower is better. Current regional evaluation data.</p></div>
+  const data = algeria ? [algeriaResults.fixed, algeriaResults.ensemble, algeriaResults.frp] : region === 'average' ? [0, 1, 2].map(i => studyRegions.reduce((a, r) => a + values(r)[i], 0) / studyRegions.length) : values(region)
+  const labels = ['Fixed multiplier', 'Static ensemble', algeria ? 'Fire-strength curve' : 'Adaptive ensemble']
+  return <div className="mission-results"><div className="mission-region-picker" role="group" aria-label="Results region"><button aria-pressed={region === 'average'} onClick={() => onChange('average')}>Four-region average</button>{studyRegions.map(r => <button key={r} aria-pressed={r === region} onClick={() => onChange(r)}>{regionNames[r]}</button>)}<button aria-pressed={algeria} onClick={() => onChange('algeria')}>Algeria (north)</button></div><div className="mission-result-bars">{labels.map((name, i) => <div className={i === 2 ? 'is-selected' : ''} key={name}><span>{name}</span><div><i style={{ width: `${data[i] / 40 * 100}%` } as CSSProperties} /><strong>{data[i].toFixed(1)}%</strong></div></div>)}</div><div className="mission-result-axis"><span>0%</span><span>20%</span><span>40% WAPE</span></div>
+    <div className="mission-algeria-result"><b>Algeria (north) · Additional check</b><span>Fire strength <strong>{algeriaResults.frp.toFixed(1)}%</strong> vs ensemble <strong>{algeriaResults.ensemble.toFixed(1)}%</strong></span></div>
+    <p className="mission-footnote">{algeria ? 'Forward-test WAPE, 2018–2021. Northern-Algeria study in the app guide; excluded from the four-region average.' : 'Test years 2018–2021. Lower is better. Four-region scores use current regional files; Algeria uses the northern study in the app guide.'}</p></div>
 }
 
 export function CalendarVisual() {

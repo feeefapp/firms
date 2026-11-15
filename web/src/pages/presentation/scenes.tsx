@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ArrowUpRight, CalendarDays, Check, Database, Earth, Flame, CodeXml, Layers, Satellite, ScanLine } from 'lucide-react'
-import { CalendarVisual, Experiments, FireDayGrid, FrpCurve, HistoryChart, ReferenceTimeline, RegionPicker, Results, StudyMap, ValidationTimeline, WeightChart, fmt } from './visuals'
+import { algeriaResults, CalendarVisual, Experiments, FireDayGrid, FrpCurve, HistoryChart, ReferenceTimeline, RegionPicker, Results, StudyMap, ValidationTimeline, WeightChart, fmt, type ResultsRegion } from './visuals'
 import { GlobeVisual } from './globe-visual'
 import { type Region } from './content'
 
@@ -56,6 +56,7 @@ function ThankYou() {
 
 export function Scene({ index }: { index: number }) {
   const [region, setRegion] = useState<Region>('punjab')
+  const [resultRegion, setResultRegion] = useState<ResultsRegion>('average')
   switch (index) {
     case 0: return <div className="mission-opening"><div className="mission-earth-hero"><GlobeVisual /></div><Copy title={<>One fire record.<br />A clearer picture.</>}><p>A harmonized burning activity calendar.<br />NASA MODIS + VIIRS, 2001 to today.</p><div className="mission-opening-source"><Satellite size={20} /><span>Built for NASA Space Apps 2026</span></div></Copy><div className="mission-hero-bottom"><span>Firms</span><span>Earth observation, made comparable.</span></div></div>
     case 1: return <div className="mission-split"><Copy title={<>Two cameras.<br />Different counts.</>}><p>A finer sensor sees more.<br />Switching sensors changes the count.</p><div className="mission-sensor-spec"><div><span>MODIS</span><b>1 km</b></div><div><span>VIIRS</span><b>375 m</b></div></div><small>Approximate pixel sizes at nadir.</small></Copy><div className="mission-visual"><RegionPicker value={region} onChange={setRegion} /><HistoryChart region={region} /></div></div>
@@ -68,7 +69,7 @@ export function Scene({ index }: { index: number }) {
     case 8: return <div className="mission-split mission-technical"><Copy title={<>Recent years carry<br />more weight.</>}><Technical>6B</Technical><div className="mission-equation-small">w<sub>y</sub> = 2<sup>−(Y − y) / 2</sup></div><p>Two years older?<br />Half the influence.</p><small>Y: latest calibration year.<br />y: year being weighted.</small></Copy><div className="mission-visual"><WeightChart /></div></div>
     case 9: return <div className="mission-wide mission-validation-slide"><div className="mission-validation-head"><StudyMap /><Copy title={<>Five regions.<br />Real observations.</>} /><div className="mission-detection-total"><Database size={23} /><b>7.8M</b><span>detections in the four-region benchmark</span></div></div><div className="mission-validation-cohort"><div className="mission-regimes">{[['Punjab', 'Agricultural burning'], ['South Sudan', 'Savanna burning'], ['Portugal', 'Mediterranean burning'], ['Bolivia', 'Tropical burning'], ['Algeria (north)', 'Forest & crop burning · Added check']].map(([name, regime], i) => <div key={name}><span className={`mission-region-dot region-${i}`} /><b>{name}</b><span>{regime}</span></div>)}</div><p className="mission-validation-cohort-note">Algeria is an additional validation check. Headline averages use the original four regions.</p></div><ValidationTimeline /></div>
     case 10: return <div className="mission-split mission-technical"><Copy title={<>How far<br />did we miss?</>}><Technical>7A</Technical><p>Add every monthly miss.<br />Divide by Aqua’s total.</p><small>A<sub>m</sub>: observed Aqua fire-days.<br />Â<sub>m</sub>: estimated Aqua equivalents.</small></Copy><div className="mission-visual"><ErrorExample /></div></div>
-    case 11: return <div className="mission-wide"><div className="mission-result-heading"><Copy title={<>Around 10%<br />forward-test error.</>} /><p>About half the error<br />of a fixed multiplier.</p></div><Results /></div>
+    case 11: return <div className="mission-wide"><div className="mission-result-heading"><Copy title={resultRegion === 'algeria' ? <>Algeria: {algeriaResults.frp.toFixed(1)}%<br />with fire strength.</> : <>Around 10%<br />forward-test error.</>} /><p>{resultRegion === 'algeria' ? <>A different variant wins<br />in the northern study.</> : <>Four-region average.<br />About half the baseline error.</>}</p></div><Results region={resultRegion} onChange={setResultRegion} /></div>
     case 12: return <div className="mission-split mission-technical"><Copy title={<>The instruments<br />disagree, too.</>}><Technical>8A</Technical><p>Even the same camera type sees a different moment.</p><small>Fewer fire-days mean larger percentage swings.<br />N = expected observed count per camera.<br />p = detection probability.</small></Copy><div className="mission-visual"><NoiseModel /></div></div>
     case 13: return <Demo />
     default: return <ThankYou />

@@ -1231,7 +1231,7 @@
 .mission-result-bars {
   display: flex;
   flex-direction: column;
-  gap: clamp(25px,4vh,50px);
+  gap: clamp(18px,3vh,34px);
   padding: 30px 0 20px;
 }
 .mission-result-bars>div {
@@ -1275,6 +1275,26 @@
   padding-top: 13px;
   font-size: 10px;
   color: var(--mission-muted);
+}
+.mission-algeria-result {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 24px;
+  padding: 14px 0 2px;
+  color: #bdcdd8;
+  font-size: clamp(12px,1.1vw,17px);
+  line-height: 1.6;
+}
+.mission-algeria-result>b {
+  color: #7cd6b0;
+  font-weight: 500;
+}
+.mission-algeria-result strong {
+  color: var(--mission-ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .mission-noise-stat {
   display: flex;

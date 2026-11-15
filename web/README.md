@@ -49,6 +49,9 @@ textures and an archived sample, so its core content does not need a sign-in or 
   The headline is the mean regional forward-test WAPE. `notes.ts` loads only in the presenter chunk.
   Slide 7 also includes northern Algeria as an additional validation check, using the study box
   from the app guide. The 7.8M detection total and headline scores still describe the original four regions.
+  Slide 8 shows that northern-study result separately: forward WAPE of 34.2% for a fixed multiplier,
+  17.5% for the ensemble, and 12.8% for the fire-strength curve. These guide-snapshot scores describe
+  a different box from the current full-country `data/regions/algeria.json` dataset.
   The simple speaking script is about 230 words across all 15 slides, leaving time for pauses and
   interaction within three minutes. Each note fits its initial slide budget at 110 words per minute.
   Demo action cues are separate from the spoken script; sources stay available for questions.
