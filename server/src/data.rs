@@ -495,7 +495,7 @@ impl BaselineKind {
     }
 }
 
-/// Same calendar month over 2003–2022 (legacy-sim baseline()).
+/// Same calendar month over 2003–2022.
 pub fn baseline(arr: &[f64], kind: BaselineKind) -> [f64; 12] {
     let mut out = [0.0; 12];
     for (c, slot) in out.iter_mut().enumerate() {

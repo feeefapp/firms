@@ -83,7 +83,7 @@ Auth: session cookie, or `Authorization: Bearer firms_…` (API key) / a feeef a
 with `GET {API}/users/auth`, cached 5 minutes). Unsafe cookie-authenticated requests need a same-origin
 `Origin`/`Referer`. Session tokens are refreshed (single flight per session) when they are about to expire.
 
-### In-app agent (docs/AGENT_MCP.md §4)
+### In-app agent
 
 | Route | Notes |
 |---|---|
@@ -108,7 +108,7 @@ tool calls in parallel and asks approval for write tools (`build_region`). Witho
 + calendar / anomalies cards). The legacy `POST /api/agent` (events `text`, `tool_call`, `tool_result`, `apply`, `done`,
 `error`) still works for the old UI.
 
-## MCP (docs/AGENT_MCP.md §2–3)
+## MCP
 
 Endpoint `https://firms.apps.feeef.dev/mcp` (Streamable HTTP). Protocol versions 2026-07-28 (stateless: `_meta`
 version/capabilities on every request, `server/discover`, `resultType`, MRTR elicitation with an HMAC-signed `requestState`

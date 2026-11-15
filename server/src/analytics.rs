@@ -516,6 +516,54 @@ pub fn calendar_csv(cal: &Value) -> String {
     s
 }
 
+/// Summary of a `/api/range` body (column layout): per satellite, day/night, busiest days and cells.
+pub fn range_summary(v: &Value, min_conf: u64) -> Value {
+    let c = &v["cols"];
+    let arr = |k: &str| c[k].as_array().cloned().unwrap_or_default();
+    let (lat, lon, t, sat, frp, conf, dn) = (arr("lat"), arr("lon"), arr("t"), arr("sat"), arr("frp"), arr("conf"), arr("dn"));
+    let sats: Vec<String> = v["sats"].as_array().into_iter().flatten().map(|s| s["code"].as_str().unwrap_or("").to_owned()).collect();
+    let mut by_sat: std::collections::BTreeMap<String, (u64, f64)> = std::collections::BTreeMap::new();
+    let mut days: std::collections::HashMap<String, (u64, f64)> = std::collections::HashMap::new();
+    let mut cells: std::collections::HashMap<(i64, i64), (u64, f64)> = std::collections::HashMap::new();
+    let (mut rows, mut night, mut total) = (0u64, 0u64, 0.0f64);
+    for i in 0..lat.len() {
+        if conf.get(i).and_then(Value::as_u64).unwrap_or(0) < min_conf {
+            continue;
+        }
+        let f = frp.get(i).and_then(Value::as_f64).unwrap_or(0.0);
+        rows += 1;
+        total += f;
+        if dn.get(i).and_then(Value::as_u64) == Some(1) {
+            night += 1;
+        }
+        let code = sats.get(sat.get(i).and_then(Value::as_u64).unwrap_or(0) as usize).cloned().unwrap_or_default();
+        let e = by_sat.entry(code).or_default();
+        e.0 += 1;
+        e.1 += f;
+        let day = chrono::DateTime::from_timestamp(t.get(i).and_then(Value::as_i64).unwrap_or(0), 0).map(|d| d.date_naive().to_string()).unwrap_or_default();
+        let e = days.entry(day).or_default();
+        e.0 += 1;
+        e.1 += f;
+        let key = ((lat[i].as_f64().unwrap_or(0.0) * 10.0).floor() as i64, (lon[i].as_f64().unwrap_or(0.0) * 10.0).floor() as i64);
+        let e = cells.entry(key).or_default();
+        e.0 += 1;
+        e.1 += f;
+    }
+    let mut top_days: Vec<_> = days.into_iter().collect();
+    top_days.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+    let mut top_cells: Vec<_> = cells.into_iter().collect();
+    top_cells.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+    let r = v["range"].as_array().cloned().unwrap_or_default();
+    json!({
+        "from": r.first(), "to": r.get(1), "bbox": v["bbox"], "country": v["country"], "source": v["source"], "note": v["note"], "truncated": v["truncated"],
+        "rows": rows, "night": night, "day": rows - night, "frp_total_mw": (total * 10.0).round() / 10.0,
+        "by_satellite": by_sat.into_iter().map(|(k, (n, f))| (k, json!({ "rows": n, "frp_mw": (f * 10.0).round() / 10.0 }))).collect::<serde_json::Map<_, _>>(),
+        "top_days": top_days.iter().take(10).map(|(d, (n, f))| json!({ "date": d, "rows": n, "frp_mw": (f * 10.0).round() / 10.0 })).collect::<Vec<_>>(),
+        "top_cells": top_cells.iter().take(10).map(|((la, lo), (n, f))| json!({ "lat": (*la as f64 + 0.5) / 10.0, "lon": (*lo as f64 + 0.5) / 10.0, "rows": n, "frp_mw": (f * 10.0).round() / 10.0 })).collect::<Vec<_>>(),
+    })
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

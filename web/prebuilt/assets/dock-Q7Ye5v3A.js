@@ -1,0 +1,1 @@
+import{ao as e,j as r,ay as c}from"./index-WBY-NQya.js";function l({label:t,content:n,children:s,className:a}){const{t:o}=e();return r.jsx(c,{label:t??o("lab.presentation.actions"),content:n,className:a,children:s})}export{l as P};

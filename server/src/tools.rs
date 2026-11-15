@@ -1,4 +1,4 @@
-//! The single tool registry shared by the MCP server and the in-app agent (docs/AGENT_MCP.md §1).
+//! The single tool registry shared by the MCP server and the in-app agent.
 //! Every tool is defined once: name, title, description, inputSchema (enums + `oneOf` titles built
 //! from live region data), outputSchema, annotations, optional MCP Apps widget and a write flag.
 
@@ -427,6 +427,20 @@ pub fn registry(st: &AppState) -> Vec<Tool> {
         )
         .open(),
         Tool::ro(
+            "range_summary",
+            "Detections over any range",
+            "Every FIRMS detection in a country or bbox over any date range (calibrated countries: from the local archive, any length from 2001; elsewhere: FIRMS API, up to 62 days): totals and FRP per satellite, per day/night, the busiest days and the busiest 0.1° cells.",
+            obj(json!({
+                "country": { "type": "string", "description": "country name (any language) or key; or give bbox" },
+                "bbox": bbox_schema(),
+                "from": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "to": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "min_confidence": { "type": "integer", "enum": [0, 1, 2] },
+            }), &["from", "to"]),
+            obj(json!({ "from": { "type": "string" }, "to": { "type": "string" }, "rows": { "type": "integer" }, "source": { "type": "string" }, "by_satellite": { "type": "object" }, "top_days": { "type": "array", "items": { "type": "object" } }, "top_cells": { "type": "array", "items": { "type": "object" } } }), &["from", "to", "rows"]),
+        )
+        .open(),
+        Tool::ro(
             "live_convert",
             "Live VIIRS → Aqua conversion",
             "Convert one day's VIIRS detections inside a bbox (or region) to Aqua-equivalent fire-days with every algorithm (ratio, per-month ratio, seasonal FRP curve, ensemble) using the containing region's calibration or the pooled global one.",
@@ -475,7 +489,10 @@ pub fn registry(st: &AppState) -> Vec<Tool> {
         Tool {
             name: "apply_view",
             title: "Show in Firms",
-            description: "Ask the Firms app to navigate and apply filters (only the fields to change). Call it when the user asks to show/open something.",
+            description: "Ask the Firms app to navigate and apply filters (only the fields to change). Call it when the user asks to show/open/zoom/filter something. \
+On the globe (page \"globe\"): `date` shows one day (last 60 days) with satellites; `range_from`+`range_to` show any range in an area \
+(needs `country` or `bbox`); `country` filters and flies to a country (name or ISO alpha-2, \"\" clears); `satellites`, `sensors`, \
+`min_confidence`, `min_frp`, `day_night` filter the pixels; `camera` flies to a place; `bbox` draws an area and opens its analysis.",
             input: obj(json!({
                 "page": { "type": "string", "enum": ["calendar", "compare", "globe", "hotspots", "regions", "assistant"] },
                 "region": region,
@@ -485,6 +502,21 @@ pub fn registry(st: &AppState) -> Vec<Tool> {
                 "baseline": base,
                 "view": { "type": "string", "enum": ["count", "anomaly"] },
                 "bbox": bbox_schema(),
+                "date": { "type": "string", "description": "Globe: one day, YYYY-MM-DD (within the last 60 days)" },
+                "range_from": { "type": "string", "description": "Globe: range start, YYYY-MM-DD" },
+                "range_to": { "type": "string", "description": "Globe: range end, YYYY-MM-DD" },
+                "country": { "type": "string", "description": "Globe: country name (any language) or ISO alpha-2; empty string clears" },
+                "satellites": { "type": "array", "items": { "type": "string", "enum": ["T", "A", "N", "N20", "N21", "L8", "L9", "G18", "G19", "Met9", "Met10", "Met12", "Him9"] }, "description": "Globe: satellites to show (empty = all)" },
+                "sensors": { "type": "array", "items": { "type": "string", "enum": ["modis", "viirs", "landsat", "geo"] }, "description": "Globe: sensor families to show (empty = all)" },
+                "min_confidence": { "type": "integer", "enum": [0, 1, 2], "description": "Globe: 0 any, 1 nominal or high, 2 high" },
+                "min_frp": { "type": "number", "minimum": 0, "description": "Globe: minimum fire radiative power, MW" },
+                "day_night": { "type": "string", "enum": ["all", "day", "night"] },
+                "camera": { "type": "object", "description": "Globe: fly the camera", "properties": {
+                    "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+                    "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+                    "altitude_km": { "type": "number", "minimum": 3, "maximum": 150000, "description": "~20000 whole Earth, ~2000 a country, ~200 a region, ~20 a town" },
+                }, "required": ["lat", "lon"] },
+                "clear_bbox": { "type": "boolean", "description": "Globe: remove the drawn area" },
             }), &[]),
             output: obj(json!({ "applied": { "type": "object" } }), &["applied"]),
             read_only: true,
@@ -618,6 +650,59 @@ pub fn validate_view(st: &AppState, a: &Value) -> AppResult<Value> {
             return Err(AppError::bad("view must be count or anomaly"));
         }
         out.insert("view".into(), json!(v));
+    }
+    // ---- globe
+    let day = |k: &str| -> AppResult<Option<String>> {
+        str_arg(a, k)
+            .map(|v| chrono::NaiveDate::parse_from_str(&v, "%Y-%m-%d").map(|d| d.to_string()).map_err(|_| AppError::bad(format!("{k} must be YYYY-MM-DD"))))
+            .transpose()
+    };
+    if let Some(d) = day("date")? {
+        out.insert("date".into(), json!(d));
+    }
+    match (day("range_from")?, day("range_to")?) {
+        (Some(f), Some(t)) => {
+            let q = crate::range::RangeQuery::parse(Some(&f), Some(&t), Some("-1,-1,1,1"), None)?;
+            out.insert("range".into(), json!([q.from.to_string(), q.to.to_string()]));
+        }
+        (None, None) => {}
+        _ => return Err(AppError::bad("range_from and range_to go together")),
+    }
+    if let Some(c) = a.get("country").and_then(Value::as_str) {
+        out.insert("country".into(), json!(c.trim().chars().take(60).collect::<String>()));
+    }
+    for (k, allowed) in [("satellites", &["T", "A", "N", "N20", "N21", "L8", "L9", "G18", "G19", "Met9", "Met10", "Met12", "Him9"][..]), ("sensors", &["modis", "viirs", "landsat", "geo"][..])] {
+        if let Some(list) = a.get(k).and_then(Value::as_array) {
+            let v: Vec<&str> = list.iter().filter_map(Value::as_str).collect();
+            if let Some(bad) = v.iter().find(|x| !allowed.contains(x)) {
+                return Err(AppError::bad(format!("unknown {k} value {bad:?}")));
+            }
+            out.insert(k.into(), json!(v));
+        }
+    }
+    if let Some(c) = num_arg(a, "min_confidence") {
+        out.insert("min_confidence".into(), json!(c.clamp(0.0, 2.0) as u8));
+    }
+    if let Some(f) = num_arg(a, "min_frp") {
+        out.insert("min_frp".into(), json!(f.max(0.0)));
+    }
+    if let Some(v) = str_arg(a, "day_night") {
+        if !["all", "day", "night"].contains(&v.as_str()) {
+            return Err(AppError::bad("day_night must be all, day or night"));
+        }
+        out.insert("day_night".into(), json!(v));
+    }
+    if let Some(c) = a.get("camera").filter(|c| c.is_object()) {
+        let (lat, lon) = (c["lat"].as_f64(), c["lon"].as_f64());
+        let (Some(lat), Some(lon)) = (lat, lon) else { return Err(AppError::bad("camera needs lat and lon")) };
+        if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
+            return Err(AppError::bad("camera lat/lon out of range"));
+        }
+        let alt = c["altitude_km"].as_f64().unwrap_or(1500.0).clamp(3.0, 150_000.0);
+        out.insert("camera".into(), json!({ "lat": lat, "lon": lon, "altitude_km": alt }));
+    }
+    if a.get("clear_bbox").and_then(Value::as_bool) == Some(true) {
+        out.insert("clear_bbox".into(), json!(true));
     }
     Ok(Value::Object(out))
 }
@@ -899,6 +984,19 @@ pub async fn call(st: &AppState, who: Option<&Principal>, name: &str, a: &Value)
             );
             (v, text)
         }
+        "range_summary" => {
+            let bbox = a.get("bbox").filter(|v| !v.is_null()).map(|_| bbox_or_region(st, a)).transpose()?;
+            let bbs = bbox.map(|b| b.iter().map(f64::to_string).collect::<Vec<_>>().join(","));
+            let q = crate::range::RangeQuery::parse(str_arg(a, "from").as_deref(), str_arg(a, "to").as_deref(), bbs.as_deref(), str_arg(a, "country").as_deref())?;
+            let min_conf = num_arg(a, "min_confidence").unwrap_or(0.0).clamp(0.0, 2.0) as u64;
+            let v = crate::range::range(st, q).await?;
+            let v = analytics::range_summary(&v, min_conf);
+            let text = format!(
+                "{} detections {}→{} ({}), FRP total {} MW.",
+                v["rows"], v["from"].as_str().unwrap_or(""), v["to"].as_str().unwrap_or(""), v["source"].as_str().unwrap_or(""), v["frp_total_mw"]
+            );
+            (v, text)
+        }
         "live_convert" => {
             let bb = bbox_or_region(st, a)?;
             let v = live::live(st, bb, str_arg(a, "date").as_deref()).await?;
@@ -980,6 +1078,23 @@ pub async fn call(st: &AppState, who: Option<&Principal>, name: &str, a: &Value)
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    #[test]
+    fn globe_view_fields_are_validated() {
+        let st = crate::state::test_state();
+        let v = validate_view(&st, &json!({
+            "page": "globe", "range_from": "2024-07-01", "range_to": "2024-08-31", "country": " Algeria ",
+            "satellites": ["N20", "A"], "sensors": ["viirs"], "min_confidence": 2, "min_frp": 10, "day_night": "night",
+            "camera": { "lat": 36.5, "lon": 3.0, "altitude_km": 400 },
+        })).unwrap();
+        assert_eq!(v["range"], json!(["2024-07-01", "2024-08-31"]));
+        assert_eq!(v["country"], "Algeria");
+        assert_eq!(v["camera"]["altitude_km"], 400.0);
+        assert!(validate_view(&st, &json!({ "satellites": ["X1"] })).is_err());
+        assert!(validate_view(&st, &json!({ "range_from": "2024-07-01" })).is_err());
+        assert!(validate_view(&st, &json!({ "camera": { "lat": 99, "lon": 0 } })).is_err());
+        assert!(validate_view(&st, &json!({ "day_night": "dusk" })).is_err());
+    }
 
     /// Minimal JSON Schema shape check for tool schemas (object at the root, required ⊆ properties,
     /// non-empty enums, `oneOf` consts equal to the enum, arrays declare `items`).

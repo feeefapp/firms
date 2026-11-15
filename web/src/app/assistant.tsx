@@ -9,6 +9,7 @@ import { agentApi, fetchCatalog, readChunks, runIdFromChunk, runIdFromHeaders, t
 import { createChunkFolder } from '@/components/chat/reduce'
 import type { ChatMessage, ConversationSummary, FirmsView } from '@/components/chat/types'
 import { useApplyView } from '@/components/chat/view'
+import { pageContext } from '@/lib/page-context'
 import { useSession } from './session'
 
 export type Effort = 'low' | 'medium' | 'high'
@@ -282,6 +283,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       to: range.to,
       algorithm: search.get('alg') || 'ensemble_adaptive',
       bbox: bbox && bbox.length === 4 && bbox.every(Number.isFinite) ? bbox : null,
+      ...(page === 'globe' ? { globe: { address: Object.fromEntries(search), ...pageContext() } } : {}),
     }
   }, [regions])
 

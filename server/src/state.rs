@@ -41,6 +41,10 @@ pub struct Inner {
     pub session_key: Vec<u8>,
     /// feeef access token hash -> user (validated with GET /users/auth, ~5 minutes).
     pub token_cache: Mutex<HashMap<String, CachedUser>>,
+    /// Tokens feeef refused (hash -> until), so a bad token costs one upstream call a minute.
+    pub bad_tokens: Mutex<HashMap<String, Instant>>,
+    /// Per-client request counters (ip|bucket -> window start, count) for the rate limiter.
+    pub rate: Mutex<HashMap<String, (Instant, u32)>>,
     /// Per-session refresh mutex (refresh tokens rotate and are single-use).
     pub refresh_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Upstream FIRMS API calls in the current 10-minute window (quota guard).
@@ -58,6 +62,22 @@ pub struct Inner {
 }
 
 pub const FIRMS_CALLS_PER_10_MIN: u32 = 400;
+
+impl AppState {
+    /// Fixed-window limiter: `max` requests per `window` for one client and bucket.
+    pub fn allow(&self, client: &str, bucket: &str, max: u32, window: Duration) -> bool {
+        let mut m = lock(&self.rate);
+        if m.len() > 100_000 {
+            m.retain(|_, (t, _)| t.elapsed() < Duration::from_secs(3600));
+        }
+        let e = m.entry(format!("{client}|{bucket}")).or_insert((Instant::now(), 0));
+        if e.0.elapsed() > window {
+            *e = (Instant::now(), 0);
+        }
+        e.1 += 1;
+        e.1 <= max
+    }
+}
 
 /// Poison-tolerant lock.
 pub fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -96,6 +116,8 @@ impl AppState {
             job_slot: tokio::sync::Semaphore::new(1),
             session_key,
             token_cache: Mutex::new(HashMap::new()),
+            bad_tokens: Mutex::new(HashMap::new()),
+            rate: Mutex::new(HashMap::new()),
             refresh_locks: Mutex::new(HashMap::new()),
             firms_calls: Mutex::new((Instant::now(), 0)),
             mcp_pending: Mutex::new(HashMap::new()),

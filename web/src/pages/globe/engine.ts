@@ -1,5 +1,5 @@
 /**
- * The globe, ported from reference/legacy-sim.html: real FIRMS records of one day drawn as their
+ * The globe: real FIRMS records of one day (or any range) drawn as their
  * real pixel footprints (scan × track, oriented by the satellite's ground track), satellites on
  * their TLE orbits (satellite.js) with their scan swaths, day/night shading, zoom-dependent map
  * tiles, picking, and a two-click box. Imperative on purpose: React owns the controls around it.
@@ -20,11 +20,19 @@ export type DaySat = {
   conf: 'pct' | 'word' | string
   symbol: string
   pattern: number
-  tle: [string, string]
+  /** Absent for range data: those pixels are drawn north-aligned, without an orbit. */
+  tle?: [string, string]
 }
 export type DayData = {
   generated?: string
   window: [string, number]
+  /** Set by `/api/range`: [from, to] (inclusive dates). */
+  range?: [string, string]
+  source?: string
+  note?: string | null
+  truncated?: boolean
+  country?: string | null
+  bbox?: number[]
   sats: DaySat[]
   versions?: string[]
   cols: {
@@ -60,9 +68,9 @@ export type PickedRecord = {
   b4: number | null
   b5: number | null
   version: string | null
-  altitudeKm: number
-  nadirKm: number
-  viewZenith: number
+  altitudeKm: number | null
+  nadirKm: number | null
+  viewZenith: number | null
   samePass: number
   samePassFrp: number
   others: { sat: DaySat; count: number }[]
@@ -92,6 +100,21 @@ type Callbacks = {
   onTick: (simT: number, playing: boolean) => void
 }
 
+/** What is shown besides time: per-satellite mask plus record filters. */
+export type FireFilters = {
+  /** Satellite indexes (into `DayData.sats`) to show. */
+  sats: boolean[]
+  minConf: 0 | 1 | 2
+  minFrp: number
+  /** 0 both, 1 day only, 2 night only */
+  dayNight: 0 | 1 | 2
+}
+
+export type Stats = { total: number; bySystem: number[]; bySat: number[]; frp: number }
+
+/** Camera as latitude, longitude and altitude above the surface (km). */
+export type CameraView = { lat: number; lon: number; altKm: number }
+
 type SatObj = {
   oi: number
   geo: boolean
@@ -107,7 +130,8 @@ export class GlobeEngine {
   readonly tMin: number
   readonly span: number
   readonly bins: Float32Array[]
-  readonly binSize = 900
+  readonly binSize: number
+  readonly isRange: boolean
   readonly count: number
   readonly validPct: number
   private D: DayData
@@ -144,6 +168,14 @@ export class GlobeEngine {
   private drawing: 0 | 1 | 2 = 0
   private p1: [number, number] | null = null
   private downXY: [number, number] | null = null
+  private dragBox = false
+  private zoomTarget: number | null = null
+  private zoomAnchor: THREE.Vector3 | null = null
+  private pinch = new Map<number, [number, number]>()
+  private pinchDist = 0
+  private order: Int32Array = new Int32Array(0)
+  private inMask: Uint8Array | null = null
+  private outline: THREE.LineSegments
   private disposed = false
   private resizeObserver: ResizeObserver
   private tiles: TileLayer
@@ -175,12 +207,13 @@ export class GlobeEngine {
     const T1 = tMax + 1800
     this.NS = Math.ceil((T1 - this.T0) / STEP) + 1
     this.span = tMax - tMin + 900
-    const norads = [...new Set(SATS.map((s) => s.norad))]
-    const oiOf = SATS.map((s) => norads.indexOf(s.norad))
+    this.isRange = Boolean(data.range)
+    const norads = [...new Set(SATS.filter((s) => s.tle).map((s) => s.norad))]
+    const oiOf = SATS.map((s) => (s.tle ? norads.indexOf(s.norad) : -1))
     const v = new THREE.Vector3()
     this.orbit = norads.map((n) => {
       const s = SATS.find((x) => x.norad === n)!
-      const rec = twoline2satrec(s.tle[0], s.tle[1])
+      const rec = twoline2satrec(s.tle![0], s.tle![1])
       const u = new Float32Array(this.NS * 3)
       const alt = new Float32Array(this.NS)
       for (let i = 0; i < this.NS; i++) {
@@ -220,7 +253,19 @@ export class GlobeEngine {
         const si = C.sat[i]
         const s = SATS[si]
         const oi = oiOf[si]
-        if (s.system === 3) {
+        if (oi < 0) {
+          // No orbit (range data): observed at its row time, pixel aligned north / east.
+          this.TOBS[i] = C.t[i] - tMin
+          this.NADIR[i] = NaN
+          a.set(0, 1, 0).addScaledVector(F, -F.y)
+          if (a.lengthSq() < 1e-10) a.set(1, 0, 0).addScaledVector(F, -F.x)
+          a.normalize()
+          c.crossVectors(a, F).normalize()
+          if (s.system === 2) {
+            scan[i] = s.pixel_km
+            track[i] = s.pixel_km
+          }
+        } else if (s.system === 3) {
           this.TOBS[i] = C.t[i] - tMin
           this.satPos(oi, C.t[i], S)
           this.subpoint(oi, C.t[i], q)
@@ -274,7 +319,8 @@ export class GlobeEngine {
       this.validPct = polar ? (100 * ok) / polar : 100
     }
 
-    // ---------- histogram bins (detections per 15 min, by system) ----------
+    // ---------- histogram bins (15 min for a day; whole hours, ~240 bins, for a range) ----------
+    this.binSize = this.span <= 2 * 86400 ? 900 : Math.ceil(this.span / 240 / 3600) * 3600
     const NB = Math.ceil(this.span / this.binSize) + 1
     this.bins = [0, 1, 2, 3].map(() => new Float32Array(NB))
     for (let i = 0; i < N; i++) {
@@ -296,9 +342,13 @@ export class GlobeEngine {
     this.camera.position.copy(ll2v(20, 30, 3.6))
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
-    this.controls.minDistance = 1.002
+    this.controls.dampingFactor = 0.09
+    this.controls.minDistance = 1.0004
     this.controls.maxDistance = 25
     this.controls.rotateSpeed = 0.5
+    // Zoom is ours (wheel + pinch): multiplicative on altitude, eased, towards the cursor.
+    this.controls.enableZoom = false
+    this.controls.enablePan = false
     {
       const g = new THREE.BufferGeometry()
       const p: number[] = []
@@ -361,6 +411,9 @@ export class GlobeEngine {
       uWindow: { value: 1e9 },
       uGeoWin: { value: 900 },
       uMinConf: { value: 0 },
+      uMinFrp: { value: 0 },
+      uDn: { value: 0 },
+      uUseIn: { value: 0 },
       uPx: { value: 800 },
       uMinPx: { value: 2.5 * this.renderer.getPixelRatio() },
       uDpr: { value: this.renderer.getPixelRatio() },
@@ -440,10 +493,24 @@ export class GlobeEngine {
     this.selGroup.visible = false
     this.scene.add(this.selGroup)
 
+    this.outline = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.9 }))
+    this.outline.renderOrder = 7
+    this.outline.frustumCulled = false
+    this.outline.visible = false
+    this.scene.add(this.outline)
+
     // ---------- input ----------
     const el = this.renderer.domElement
+    el.style.touchAction = 'none'
     el.addEventListener('pointerdown', this.onDown)
+    el.addEventListener('pointermove', this.onMove)
     el.addEventListener('pointerup', this.onUp)
+    el.addEventListener('pointercancel', this.onCancel)
+    el.addEventListener('wheel', this.onWheel, { passive: false })
+    if (this.isRange) {
+      this.simT = this.span
+      this.playing = false
+    }
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(container)
     this.resize()
@@ -451,6 +518,7 @@ export class GlobeEngine {
   }
 
   private oiOf: number[]
+  private fireGeo!: THREE.InstancedBufferGeometry
   private scan: Float32Array
   private track: Float32Array
   private SW_N: number
@@ -490,9 +558,11 @@ export class GlobeEngine {
     g.instanceCount = N
     const iC = new Float32Array(N * 3), iX = new Float32Array(N * 3), iY = new Float32Array(N * 3)
     const aT = new Float32Array(N), aSat = new Float32Array(N), aSys = new Float32Array(N), aPat = new Float32Array(N), aConf = new Float32Array(N)
+    const aDn = new Float32Array(N), aFrp = new Float32Array(N), aIn = new Float32Array(N).fill(1)
     // coarse geostationary first, then MODIS, VIIRS, and the 30 m Landsat pixels on top
     const RANK = [1, 2, 3, 0]
     const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => RANK[SATS[C.sat[a]].system] - RANK[SATS[C.sat[b]].system] || a - b)
+    this.order = Int32Array.from(order)
     for (let n = 0; n < N; n++) {
       const i = order[n]
       const s = SATS[C.sat[i]]
@@ -508,6 +578,8 @@ export class GlobeEngine {
       aSys[n] = s.system
       aPat[n] = s.pattern
       aConf[n] = C.conf[i]
+      aDn[n] = C.dn[i] ? 2 : 1
+      aFrp[n] = C.frp[i] ?? 0
     }
     const IA = (arr: Float32Array, n: number) => new THREE.InstancedBufferAttribute(arr, n)
     g.setAttribute('iC', IA(iC, 3))
@@ -518,6 +590,10 @@ export class GlobeEngine {
     g.setAttribute('aSys', IA(aSys, 1))
     g.setAttribute('aPat', IA(aPat, 1))
     g.setAttribute('aConf', IA(aConf, 1))
+    g.setAttribute('aDn', IA(aDn, 1))
+    g.setAttribute('aFrp', IA(aFrp, 1))
+    g.setAttribute('aIn', IA(aIn, 1))
+    this.fireGeo = g
     const mesh = new THREE.Mesh(
       g,
       new THREE.ShaderMaterial({
@@ -527,13 +603,14 @@ export class GlobeEngine {
         side: THREE.DoubleSide,
         vertexShader: `
           attribute vec3 iC, iX, iY;
-          attribute float aT, aSat, aSys, aPat, aConf;
-          uniform float uTime, uWindow, uGeoWin, uMinConf, uPx, uMinPx; uniform float uMask[16]; uniform vec3 uSysCol[4];
+          attribute float aT, aSat, aSys, aPat, aConf, aDn, aFrp, aIn;
+          uniform float uTime, uWindow, uGeoWin, uMinConf, uMinFrp, uDn, uUseIn, uPx, uMinPx; uniform float uMask[16]; uniform vec3 uSysCol[4];
           varying vec3 vCol; varying float vFlash, vPx, vSys, vPat; varying vec2 vUv;
           void main(){
             float age = uTime - aT;
             float win = aSys > 2.5 ? min(uWindow, uGeoWin) : uWindow;
-            if (age < 0.0 || age > win || uMask[int(aSat + 0.5)] < 0.5 || aConf < uMinConf - 0.5) { gl_Position = vec4(2.,2.,2.,1.); return; }
+            if (age < 0.0 || age > win || uMask[int(aSat + 0.5)] < 0.5 || aConf < uMinConf - 0.5 || aFrp < uMinFrp
+                || (uDn > 0.5 && abs(aDn - uDn) > 0.5) || (uUseIn > 0.5 && aIn < 0.5)) { gl_Position = vec4(2.,2.,2.,1.); return; }
             vec3 c = uSysCol[int(aSys + 0.5)];
             vec4 mvC = modelViewMatrix * vec4(iC, 1.);
             float px = 2. * max(length(iX), length(iY)) * uPx / max(-mvC.z, 1e-6);
@@ -591,19 +668,52 @@ export class GlobeEngine {
   setWindow(seconds: number) {
     this.fireU.uWindow.value = seconds
   }
-  setSystemVisible(system: number, on: boolean) {
+  /** Satellites, confidence, FRP and day/night: drawn and picked alike. */
+  setFilters(f: FireFilters) {
     const mask = this.fireU.uMask.value as number[]
-    this.D.sats.forEach((s, i) => {
-      if (s.system === system) {
-        mask[i] = on ? 1 : 0
-        this.satOn[i] = on
-      }
+    this.D.sats.forEach((_, i) => {
+      const on = f.sats[i] !== false
+      mask[i] = on ? 1 : 0
+      this.satOn[i] = on
     })
     for (const o of this.satObjs) o.on = o.sats.some((j) => this.satOn[j])
+    this.fireU.uMinConf.value = f.minConf
+    this.fireU.uMinFrp.value = f.minFrp
+    this.fireU.uDn.value = f.dayNight
+  }
+  /** Records inside an area (one flag per record, in data order), or null for everywhere. */
+  setAreaMask(mask: Uint8Array | null) {
+    this.inMask = mask
+    this.fireU.uUseIn.value = mask ? 1 : 0
+    if (!mask) return
+    const attr = this.fireGeo.getAttribute('aIn') as THREE.InstancedBufferAttribute
+    const arr = attr.array as Float32Array
+    for (let n = 0; n < this.order.length; n++) arr[n] = mask[this.order[n]]
+    attr.needsUpdate = true
+  }
+  /** A country (or any) outline: rings of [lon, lat]. */
+  setOutline(rings: [number, number][][] | null) {
+    if (!rings?.length) {
+      this.outline.visible = false
+      return
+    }
+    const pts: number[] = []
+    const a = new THREE.Vector3(), b = new THREE.Vector3()
+    for (const ring of rings)
+      for (let k = 0; k < ring.length - 1; k++) {
+        ll2v(ring[k][1], ring[k][0], 1.0005, a)
+        ll2v(ring[k + 1][1], ring[k + 1][0], 1.0005, b)
+        pts.push(a.x, a.y, a.z, b.x, b.y, b.z)
+      }
+    this.outline.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+    this.outline.geometry.computeBoundingSphere()
+    this.outline.visible = true
   }
   setDrawing(on: boolean) {
     this.drawing = on ? 1 : 0
     this.p1 = null
+    this.dragBox = false
+    this.controls.enabled = !on
     this.renderer.domElement.style.cursor = on ? 'crosshair' : ''
   }
   setBox(bb: number[] | null) {
@@ -621,53 +731,167 @@ export class GlobeEngine {
     this.boxLine.geometry.setFromPoints(pts)
     this.boxLine.visible = true
   }
+  /** Flies so the box fills about 70% of the view. */
   flyToBox(bb: number[]) {
     const [w, s, e, n] = bb
-    const span = Math.max(e - w, n - s)
-    this.flyTo = ll2v((s + n) / 2, (w + e) / 2, 1 + Math.min(2, Math.max(0.02, span / 60)))
+    const lat = (s + n) / 2
+    const span = Math.max((e - w) * Math.cos(lat * DEG), n - s) * DEG
+    const altKm = ((span / 0.7 / 2 / Math.tan((this.camera.fov * DEG) / 2)) * R_KM) * Math.max(1, 1 / this.camera.aspect)
+    this.flyToView({ lat, lon: (w + e) / 2, altKm })
+  }
+  flyToView(v: CameraView) {
+    const alt = Math.min(24, Math.max(0.0004, v.altKm / R_KM))
+    this.zoomTarget = null
+    this.flyTo = ll2v(v.lat, v.lon, 1 + alt)
   }
   flyHome() {
+    this.zoomTarget = null
     this.flyTo = this.camera.position.clone().normalize().multiplyScalar(3.6)
   }
   zoomToSelection() {
     if (!this.selGroup.visible) return
+    this.zoomTarget = null
     this.flyTo = this.ring.position.clone().normalize().multiplyScalar(1.003)
   }
   clearSelection() {
     this.selGroup.visible = false
   }
+  /** Where the camera looks from. */
+  cameraView(): CameraView {
+    const [lat, lon] = v2ll(this.camera.position)
+    return { lat: Math.round(lat * 1e3) / 1e3, lon: Math.round(lon * 1e3) / 1e3, altKm: Math.round((this.camera.position.length() - 1) * R_KM) }
+  }
+  /** Visible records right now (time window and every filter), by system and satellite. */
+  stats(bb?: number[] | null): Stats {
+    const C = this.D.cols
+    const out: Stats = { total: 0, bySystem: [0, 0, 0, 0], bySat: this.D.sats.map(() => 0), frp: 0 }
+    for (let i = 0; i < this.count; i++) {
+      if (bb && (C.lon[i] < bb[0] || C.lon[i] > bb[2] || C.lat[i] < bb[1] || C.lat[i] > bb[3])) continue
+      if (!this.isVisible(i)) continue
+      out.total++
+      out.bySat[C.sat[i]]++
+      out.bySystem[this.D.sats[C.sat[i]].system]++
+      out.frp += C.frp[i] ?? 0
+    }
+    return out
+  }
 
   // ---------- picking ----------
-  private onDown = (e: PointerEvent) => {
-    this.downXY = [e.clientX, e.clientY]
+  private hitLL(e: { clientX: number; clientY: number }): [number, number] | null {
+    const hit = this.hit(e)
+    return hit ? v2ll(hit) : null
   }
-  private onUp = (e: PointerEvent) => {
-    if (!this.downXY || Math.hypot(e.clientX - this.downXY[0], e.clientY - this.downXY[1]) > 5) return
+  private hit(e: { clientX: number; clientY: number }): THREE.Vector3 | null {
     const r = this.renderer.domElement.getBoundingClientRect()
     const mouse = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
     const ray = new THREE.Raycaster()
     ray.setFromCamera(mouse, this.camera)
-    const hit = ray.intersectObject(this.earth)[0]
+    return ray.intersectObject(this.earth)[0]?.point ?? null
+  }
+  private boxFrom(a: [number, number], b: [number, number]) {
+    return [Math.min(a[1], b[1]), Math.min(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[0], b[0])].map((x) => Math.round(x * 100) / 100)
+  }
+  private onDown = (e: PointerEvent) => {
+    this.pinch.set(e.pointerId, [e.clientX, e.clientY])
+    if (this.pinch.size === 2) {
+      const [p, q] = [...this.pinch.values()]
+      this.pinchDist = Math.hypot(p[0] - q[0], p[1] - q[1])
+      this.downXY = null
+      return
+    }
+    this.downXY = [e.clientX, e.clientY]
+    this.flyTo = null
+    if (this.drawing === 1) {
+      const ll = this.hitLL(e)
+      if (!ll) return
+      this.p1 = [ll[0], ll[1]]
+      this.dragBox = true
+      this.renderer.domElement.setPointerCapture(e.pointerId)
+    }
+  }
+  private onMove = (e: PointerEvent) => {
+    if (this.pinch.has(e.pointerId)) this.pinch.set(e.pointerId, [e.clientX, e.clientY])
+    if (this.pinch.size === 2 && this.pinchDist > 0) {
+      const [p, q] = [...this.pinch.values()]
+      const d = Math.hypot(p[0] - q[0], p[1] - q[1])
+      if (d > 0) this.zoomBy(this.pinchDist / d, { clientX: (p[0] + q[0]) / 2, clientY: (p[1] + q[1]) / 2 }, true)
+      this.pinchDist = d
+      return
+    }
+    if ((this.drawing === 1 && this.dragBox && this.p1) || (this.drawing === 2 && this.p1)) {
+      const ll = this.hitLL(e)
+      if (ll) this.setBox(this.boxFrom(this.p1, ll))
+    }
+  }
+  private onCancel = (e: PointerEvent) => {
+    this.pinch.delete(e.pointerId)
+    if (this.pinch.size < 2) this.pinchDist = 0
+  }
+  private onUp = (e: PointerEvent) => {
+    this.pinch.delete(e.pointerId)
+    if (this.pinch.size < 2) this.pinchDist = 0
     if (this.drawing) {
-      if (!hit) return
-      const [lat, lon] = v2ll(hit.point)
-      if (this.drawing === 1) {
-        this.p1 = [lon, lat]
+      const ll = this.hitLL(e)
+      const moved = this.downXY ? Math.hypot(e.clientX - this.downXY[0], e.clientY - this.downXY[1]) : 0
+      if (this.drawing === 1 && this.dragBox && this.p1 && ll && moved > 8) {
+        // drag: one gesture draws the box
+        const bb = this.boxFrom(this.p1, ll)
+        this.setDrawing(false)
+        this.setBox(bb)
+        this.cb.onBoxPoint(2, bb)
+      } else if (this.drawing === 1 && this.p1) {
+        // a tap: the first corner; the second tap closes the box
         this.drawing = 2
+        this.dragBox = false
         this.cb.onBoxPoint(1, null)
-      } else if (this.p1) {
-        const bb = [Math.min(this.p1[0], lon), Math.min(this.p1[1], lat), Math.max(this.p1[0], lon), Math.max(this.p1[1], lat)].map((x) => Math.round(x * 100) / 100)
+      } else if (this.drawing === 2 && this.p1 && ll) {
+        const bb = this.boxFrom(this.p1, ll)
         this.setDrawing(false)
         this.setBox(bb)
         this.cb.onBoxPoint(2, bb)
       }
+      this.downXY = null
       return
     }
+    if (!this.downXY || Math.hypot(e.clientX - this.downXY[0], e.clientY - this.downXY[1]) > 5) return
+    this.downXY = null
+    const hit = this.hit(e)
     if (!hit) {
       this.select(-1)
       return
     }
-    this.select(this.nearest(hit.point.clone().normalize()))
+    this.select(this.nearest(hit.clone().normalize()))
+  }
+  private onWheel = (e: WheelEvent) => {
+    e.preventDefault()
+    // trackpads send many small deltas, mice a few big ones: both map to a gentle factor
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+    this.zoomBy(Math.exp(Math.max(-1, Math.min(1, dy / 400))), e, false)
+  }
+  /** Altitude × factor, eased; the point under the cursor drifts towards the center while zooming in. */
+  private zoomBy(factor: number, at: { clientX: number; clientY: number }, immediate: boolean) {
+    const alt = this.zoomTarget ?? this.camera.position.length() - 1
+    const next = Math.min(24, Math.max(0.0004, alt * factor))
+    this.flyTo = null
+    this.zoomTarget = next
+    this.zoomAnchor = factor < 1 ? (this.hit(at)?.normalize() ?? null) : null
+    if (immediate) this.applyZoom(1)
+  }
+  private applyZoom(k: number) {
+    if (this.zoomTarget == null) return
+    const d = this.camera.position.length()
+    const alt = d - 1
+    const nextAlt = alt + (this.zoomTarget - alt) * k
+    const dirV = this.camera.position.clone().divideScalar(d)
+    if (this.zoomAnchor && nextAlt < alt) {
+      const share = Math.min(1, (1 - nextAlt / alt) * 0.9)
+      dirV.lerp(this.zoomAnchor, share).normalize()
+    }
+    this.camera.position.copy(dirV.multiplyScalar(1 + nextAlt))
+    if (Math.abs(this.zoomTarget - nextAlt) < this.zoomTarget * 0.002) {
+      this.zoomTarget = null
+      this.zoomAnchor = null
+    }
   }
 
   private isVisible(i: number) {
@@ -675,7 +899,11 @@ export class GlobeEngine {
     const age = this.simT - this.TOBS[i]
     const geo = this.D.sats[C.sat[i]].system === 3
     const win = geo ? Math.min(this.fireU.uWindow.value as number, this.fireU.uGeoWin.value as number) : (this.fireU.uWindow.value as number)
-    return age >= 0 && age <= win && this.satOn[C.sat[i]]
+    if (age < 0 || age > win || !this.satOn[C.sat[i]]) return false
+    if (C.conf[i] < (this.fireU.uMinConf.value as number) || (C.frp[i] ?? 0) < (this.fireU.uMinFrp.value as number)) return false
+    const dn = this.fireU.uDn.value as number
+    if (dn && (C.dn[i] ? 2 : 1) !== dn) return false
+    return !this.inMask || this.inMask[i] === 1
   }
 
   private nearest(P: THREE.Vector3) {
@@ -735,8 +963,7 @@ export class GlobeEngine {
     this.ring.position.copy(F).multiplyScalar(1.00007)
     this.ring.lookAt(F.clone().multiplyScalar(2))
     this.selGroup.visible = true
-    const SP = this.satPos(oi, tObs)
-    const vza = Math.acos(SP.clone().sub(F).normalize().dot(F)) / DEG
+    const vza = oi < 0 ? null : Math.acos(this.satPos(oi, tObs).clone().sub(F).normalize().dot(F)) / DEG
     const same: number[] = []
     const segs: number[] = []
     const bySat = new Map<number, number>()
@@ -770,21 +997,13 @@ export class GlobeEngine {
       b4: C.b4?.[i] ?? null,
       b5: C.b5?.[i] ?? null,
       version: C.ver && this.D.versions ? (this.D.versions[C.ver[i]] ?? null) : null,
-      altitudeKm: this.altAt(oi, tObs),
-      nadirKm: this.NADIR[i],
+      altitudeKm: oi < 0 ? null : this.altAt(oi, tObs),
+      nadirKm: Number.isFinite(this.NADIR[i]) ? this.NADIR[i] : null,
       viewZenith: vza,
       samePass: same.length,
       samePassFrp: same.reduce((a, j) => a + (C.frp[j] ?? 0), 0),
       others: [...bySat].sort((a, b) => b[1] - a[1]).map(([k, count]) => ({ sat: SATS[k], count })),
     })
-  }
-
-  /** Sat visible-record counts right now, by system (for the legend). */
-  visibleBySystem(): number[] {
-    const out = [0, 0, 0, 0]
-    const C = this.D.cols
-    for (let i = 0; i < this.count; i++) if (this.isVisible(i)) out[this.D.sats[C.sat[i]].system]++
-    return out
   }
 
   // ---------- loop ----------
@@ -890,14 +1109,22 @@ export class GlobeEngine {
     this.fireU.uTime.value = this.simT
     this.sunDir(tAbs, this.earthU.sunDir.value as THREE.Vector3)
     this.updateSats(tAbs)
+    const ease = 1 - Math.exp(-dt * 5)
     if (this.flyTo) {
+      // fly in log-altitude so long trips feel even, the direction slerped
       const d = this.camera.position.length()
-      const dir = this.flyTo.clone().normalize()
-      const nd = this.camera.position.clone().divideScalar(d).lerp(dir, 0.08)
+      const dirV = this.camera.position.clone().divideScalar(d)
+      const to = this.flyTo.clone().normalize()
+      const nd = dirV.lerp(to, ease)
       if (nd.lengthSq() < 1e-6) nd.set(0, 1, 0)
-      this.camera.position.copy(nd.normalize().multiplyScalar(d + (this.flyTo.length() - d) * 0.08))
-      if (this.camera.position.distanceTo(this.flyTo) < (this.flyTo.length() - 1) * 0.02) this.flyTo = null
+      const la = Math.log(d - 1), lb = Math.log(this.flyTo.length() - 1)
+      this.camera.position.copy(nd.normalize().multiplyScalar(1 + Math.exp(la + (lb - la) * ease)))
+      if (nd.angleTo(to) < 1e-4 && Math.abs(la - lb) < 0.01) this.flyTo = null
     }
+    this.applyZoom(Math.min(1, ease * 1.6))
+    const alt0 = this.camera.position.length() - 1
+    // the surface follows the finger at any altitude
+    this.controls.rotateSpeed = Math.min(0.5, Math.max(0.0006, alt0 * 0.19))
     this.controls.update()
     const alt = this.camera.position.length() - 1
     const near = Math.max(0.00003, alt * 0.3)
@@ -905,7 +1132,6 @@ export class GlobeEngine {
       this.camera.near = near
       this.camera.updateProjectionMatrix()
     }
-    this.controls.zoomSpeed = alt < 0.05 ? 0.5 : 1
     if (this.selGroup.visible) this.ring.scale.setScalar(Math.max(alt * 0.012, 0.00004))
     this.tiles.update(this.camera, this.view.clientWidth, this.view.clientHeight)
 
@@ -946,6 +1172,9 @@ export class GlobeEngine {
     this.resizeObserver.disconnect()
     this.renderer.domElement.removeEventListener('pointerdown', this.onDown)
     this.renderer.domElement.removeEventListener('pointerup', this.onUp)
+    this.renderer.domElement.removeEventListener('pointermove', this.onMove)
+    this.renderer.domElement.removeEventListener('pointercancel', this.onCancel)
+    this.renderer.domElement.removeEventListener('wheel', this.onWheel)
     this.controls.dispose()
     this.tiles.dispose()
     this.scene.traverse((obj) => {

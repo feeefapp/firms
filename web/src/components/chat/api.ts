@@ -1,5 +1,5 @@
 /**
- * The in-app agent API (docs/AGENT_MCP.md §4): model catalog, conversations, streamed turns
+ * The in-app agent API: model catalog, conversations, streamed turns
  * (AI SDK UI message stream v1 over SSE), resumable runs and approvals. Same-origin with the
  * session cookie; unsafe methods carry the page's Origin (the server's CSRF check).
  */
@@ -179,7 +179,7 @@ export type TurnBody = {
   text: string
   model?: string
   reasoning_effort?: 'low' | 'medium' | 'high'
-  context: { page: string; region: string | null; from: string | null; to: string | null; algorithm: string | null; bbox: number[] | null }
+  context: { page: string; region: string | null; from: string | null; to: string | null; algorithm: string | null; bbox: number[] | null; globe?: Record<string, unknown> }
 }
 
 /** The run id of a turn: a response header, or the `start` chunk's metadata, or a `data-firms-run` chunk. */

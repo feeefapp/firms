@@ -10,7 +10,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::auth::{User, random_token, sha256_hex};
+use crate::auth::{MaybeUser, User, random_token, sha256_hex};
 use crate::data::{self, BaselineKind};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -29,6 +29,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/hotspots", get(hotspots))
         .route("/api/live", get(live_handler))
         .route("/api/day", get(day))
+        .route("/api/range", get(range_handler))
         .route("/api/days", get(days))
         .route("/api/jobs/{id}", get(job))
         .route("/api/keys", get(list_keys).post(create_key))
@@ -179,7 +180,7 @@ async fn live_handler(State(st): State<AppState>, Query(m): Q) -> AppResult<Json
     Ok(Json(live::live(&st, bb, q(&m, "date")).await?))
 }
 
-async fn day(State(st): State<AppState>, Query(m): Q) -> AppResult<Response> {
+async fn day(State(st): State<AppState>, MaybeUser(who): MaybeUser, Query(m): Q) -> AppResult<Response> {
     let date = match q(&m, "date") {
         Some(d) => firms::parse_date(Some(d))?,
         None => st.days.latest().ok_or_else(|| AppError::NotFound("no globe snapshot yet".into()))?,
@@ -196,8 +197,19 @@ async fn day(State(st): State<AppState>, Query(m): Q) -> AppResult<Response> {
     if st.cfg.map_key.is_none() {
         return Err(AppError::Unavailable("no snapshot and FIRMS_MAP_KEY is not configured".into()));
     }
+    // Snapshots are public; building a new one spends the FIRMS quota, so it needs an account.
+    if who.is_none() {
+        return Err(AppError::Unauthorized);
+    }
     let job = jobs::build_day(&st, date)?;
     Ok((StatusCode::ACCEPTED, Json(json!({ "job": job, "date": date.to_string() }))).into_response())
+}
+
+async fn range_handler(State(st): State<AppState>, Query(m): Q) -> AppResult<Response> {
+    let query = crate::range::RangeQuery::parse(q(&m, "from"), q(&m, "to"), q(&m, "bbox"), q(&m, "country"))?;
+    let settled = query.to < chrono::Utc::now().date_naive() - chrono::Duration::days(3);
+    let body = crate::range::range(&st, query).await?;
+    Ok(([(header::CACHE_CONTROL, if settled { "public, max-age=86400" } else { "public, max-age=900" })], Json(body)).into_response())
 }
 
 async fn days(State(st): State<AppState>) -> Json<Value> {

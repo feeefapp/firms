@@ -33,7 +33,36 @@ export function viewHref(view: FirmsView, current: { pathname: string; search: s
   if (view.view === 'anomaly') next.set('view', 'anomaly')
   else if (view.view === 'count') next.delete('view')
   if (view.bbox) next.set('bbox', Array.isArray(view.bbox) ? view.bbox.join(',') : view.bbox)
-  if (view.date) next.set('date', view.date)
+  if (view.clear_bbox) next.delete('bbox')
+  if (view.date) {
+    next.set('date', view.date)
+    next.delete('range')
+  }
+  if (Array.isArray(view.range) && view.range.length === 2) next.set('range', view.range.join('..'))
+  if (typeof view.country === 'string') {
+    if (view.country.trim()) next.set('country', view.country.trim())
+    else next.delete('country')
+  }
+  const list = (k: string, v: string[] | undefined) => {
+    if (!Array.isArray(v)) return
+    if (v.length) next.set(k, v.join(','))
+    else next.delete(k)
+  }
+  list('sats', view.satellites)
+  list('sensor', view.sensors)
+  if (typeof view.min_confidence === 'number') {
+    if (view.min_confidence > 0) next.set('conf', String(Math.min(2, Math.round(view.min_confidence))))
+    else next.delete('conf')
+  }
+  if (typeof view.min_frp === 'number') {
+    if (view.min_frp > 0) next.set('frp', String(view.min_frp))
+    else next.delete('frp')
+  }
+  if (view.day_night === 'day' || view.day_night === 'night') next.set('dn', view.day_night)
+  else if (view.day_night === 'all') next.delete('dn')
+  if (view.camera && Number.isFinite(view.camera.lat) && Number.isFinite(view.camera.lon)) {
+    next.set('cam', [view.camera.lat, view.camera.lon, Math.round(view.camera.altitude_km ?? 1500)].join(','))
+  }
   const qs = next.toString()
   return qs ? `${path}?${qs}` : path
 }
@@ -76,6 +105,13 @@ export function useViewSummary() {
     if (view.algorithm) parts.push(t('m.chat.view.algorithm', { algorithm: view.algorithm }))
     if (view.bbox) parts.push(t('m.chat.applied.bbox'))
     if (view.date) parts.push(view.date)
+    if (view.range) parts.push(`${view.range[0]} → ${view.range[1]}`)
+    if (view.country) parts.push(view.country)
+    if (view.satellites?.length) parts.push(view.satellites.join(', '))
+    if (view.sensors?.length) parts.push(view.sensors.join(', '))
+    if (view.min_frp) parts.push(`≥ ${view.min_frp} MW`)
+    if (view.day_night && view.day_night !== 'all') parts.push(t(view.day_night === 'day' ? 'm.search.day' : 'm.search.night'))
+    if (view.camera) parts.push(t('m.chat.applied.camera'))
     if (view.page) parts.push(t(`m.chat.page.${PAGE_PATHS[view.page] ? view.page : 'other'}`))
     return parts.join(' · ') || t('m.chat.applied.none')
   }

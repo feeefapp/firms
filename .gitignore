@@ -8,3 +8,11 @@ data/raw/
 .DS_Store
 .claude/
 __pycache__/
+# generated globe snapshots (built on demand by tools/fetch_data.py)
+data/day/
+# runtime state when FIRMS_DATA_DIR points at data/
+data/cache/
+data/*.db
+data/*.db-*
+data/session.key
+data/jobs/

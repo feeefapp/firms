@@ -15,6 +15,7 @@ mod jobs;
 mod live;
 mod mcp;
 mod oauth;
+mod range;
 mod state;
 mod tools;
 mod web;
@@ -120,7 +121,7 @@ async fn healthz(axum::extract::State(st): axum::extract::State<AppState>) -> Js
 }
 
 /// CORS `*` for the MCP endpoint and the OAuth metadata / token / registration endpoints
-/// (docs/AGENT_MCP.md §2); answers preflights itself.
+/// ; answers preflights itself.
 async fn cors(req: Request, next: Next) -> Response {
     let path = req.uri().path();
     let open = path == "/mcp" || path.starts_with("/.well-known/") || matches!(path, "/oauth/token" | "/oauth/register" | "/oauth/revoke");
@@ -144,6 +145,37 @@ async fn cors(req: Request, next: Next) -> Response {
     res
 }
 
+/// The client address: the right-most X-Forwarded-For entry (the one our proxy appended).
+fn client_ip(req: &Request) -> String {
+    req.headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.rsplit(',').next())
+        .map(|v| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "direct".into())
+}
+
+/// Per-IP limits on the endpoints that spend shared budgets (FIRMS calls, client registrations).
+async fn limits(axum::extract::State(st): axum::extract::State<AppState>, req: Request, next: Next) -> Response {
+    let path = req.uri().path();
+    let rule = match path {
+        "/api/hotspots" | "/api/live" | "/api/range" | "/api/day" => Some(("firms", 40, 60)),
+        "/oauth/register" => Some(("register", 20, 3600)),
+        "/oauth/token" => Some(("token", 120, 60)),
+        "/mcp" | "/api/agent" => Some(("rpc", 240, 60)),
+        _ => None,
+    };
+    if let Some((bucket, max, secs)) = rule {
+        if !st.allow(&client_ip(&req), bucket, max, std::time::Duration::from_secs(secs)) {
+            let mut res = (StatusCode::TOO_MANY_REQUESTS, Json(json!({ "error": { "code": "rate_limited", "message": "too many requests; slow down" } }))).into_response();
+            res.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from(secs.min(60)));
+            return res;
+        }
+    }
+    next.run(req).await
+}
+
 pub fn app(st: AppState) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
@@ -153,11 +185,17 @@ pub fn app(st: AppState) -> Router {
         .merge(api::routes())
         .merge(mcp::routes())
         .fallback(web::serve)
+        .layer(axum::middleware::from_fn_with_state(st.clone(), limits))
         .with_state(st)
         .layer(CompressionLayer::new())
         .layer(SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY")))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("frame-ancestors 'none'"),
         ))
         .layer(SetResponseHeaderLayer::if_not_present(
             header::REFERRER_POLICY,
@@ -165,6 +203,31 @@ pub fn app(st: AppState) -> Router {
         ))
         .layer(axum::middleware::from_fn(cors))
         .layer(TraceLayer::new_for_http())
+}
+
+/// Cached FIRMS answers older than 30 days are dropped once a day (keys are arbitrary boxes).
+async fn evict_firms_cache(dir: std::path::PathBuf) {
+    loop {
+        if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
+            let mut removed = 0u32;
+            while let Ok(Some(e)) = rd.next_entry().await {
+                let old = e
+                    .metadata()
+                    .await
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|m| m.elapsed().ok())
+                    .is_some_and(|age| age > std::time::Duration::from_secs(30 * 86400));
+                if old && tokio::fs::remove_file(e.path()).await.is_ok() {
+                    removed += 1;
+                }
+            }
+            if removed > 0 {
+                tracing::info!(removed, "FIRMS cache: evicted old entries");
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(86400)).await;
+    }
 }
 
 async fn shutdown() {
@@ -219,6 +282,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(%bind, "listening");
+    tokio::spawn(evict_firms_cache(st.cfg.data_dir.join("cache").join("firms")));
     axum::serve(listener, app(st)).with_graceful_shutdown(shutdown()).await?;
     Ok(())
 }

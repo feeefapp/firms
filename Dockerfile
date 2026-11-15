@@ -5,8 +5,8 @@
 #   docker build --secret id=gh_token,env=GITHUB_TOKEN -t firms .
 #   docker run -p 8080:8080 -v firms-data:/data --env-file .env -e FIRMS_PUBLIC_ORIGIN=http://localhost:8080 firms
 #
-# The `gh_token` secret (a GitHub token that can read feeefapp/ui) is only mounted for `npm ci`;
-# nothing is written to a layer. Without it the git dependency is fetched anonymously.
+# The `gh_token` secret (a GitHub token that can read the @feeef.dev/ui kit) is only mounted for `npm ci`;
+# nothing is written to a layer. Without it the committed bundle in web/prebuilt is used.
 
 # --- Web app (Vite build) ------------------------------------------------------
 # The full Node image ships git, which npm needs for the github: dependency.

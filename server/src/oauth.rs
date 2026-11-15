@@ -1,4 +1,4 @@
-//! MCP OAuth (docs/AGENT_MCP.md §3): Firms is its own authorization server for `/mcp`, feeef is the
+//! MCP OAuth: Firms is its own authorization server for `/mcp`, feeef is the
 //! identity provider (the existing "Sign in with feeef" session).
 //!
 //! - RFC 9728 protected-resource metadata and RFC 8414 authorization-server metadata

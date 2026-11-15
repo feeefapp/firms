@@ -22,7 +22,7 @@ export default defineConfig(async ({ mode, command }) => {
     resolve: { alias: { '@': path.resolve(__dirname, './src') } },
     server: {
       port: 5190,
-      proxy: mock ? undefined : { '/api': proxied, '/auth': proxied, '/mcp': proxied, '/healthz': proxied },
+      proxy: mock ? undefined : { '/api': proxied, '/auth': proxied, '/oauth': proxied, '/.well-known': proxied, '/mcp': proxied, '/healthz': proxied },
     },
     build: {
       chunkSizeWarningLimit: 900,

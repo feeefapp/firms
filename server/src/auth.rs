@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 
 use crate::db::{SessionRow, now};
 use crate::error::{AppError, AppResult};
-use crate::state::{AppState, CachedUser};
+use crate::state::{lock, AppState, CachedUser};
 
 pub const SESSION_COOKIE: &str = "firms_session";
 const STATE_COOKIE: &str = "firms_oauth";
@@ -110,7 +110,17 @@ fn is_unsafe(m: &Method) -> bool {
 
 pub(crate) fn safe_next(next: Option<&str>) -> String {
     match next {
-        Some(n) if n.starts_with('/') && !n.starts_with("//") && !n.contains('\\') && n.len() < 512 => n.to_owned(),
+        // Browsers drop tabs/newlines in URLs ("/\t/evil.com" becomes "//evil.com"): refuse any control
+        // or whitespace character outright.
+        Some(n)
+            if n.starts_with('/')
+                && !n.starts_with("//")
+                && !n.contains('\\')
+                && !n.chars().any(|c| c.is_control() || c.is_whitespace())
+                && n.len() < 512 =>
+        {
+            n.to_owned()
+        }
         _ => "/".to_owned(),
     }
 }
@@ -406,6 +416,14 @@ pub async fn principal_from_bearer(st: &AppState, tok: &str) -> AppResult<Princi
         return Ok(Principal { user_id: uid, user, source: Source::ApiKey, feeef_token: None, scope: String::new() });
     }
     let key = sha256_hex(tok);
+    // A token feeef refused stays refused for a minute: no upstream call per retry.
+    {
+        let mut bad = lock(&st.bad_tokens);
+        bad.retain(|_, until| *until > Instant::now());
+        if bad.contains_key(&key) {
+            return Err(AppError::Unauthorized);
+        }
+    }
     let cached = {
         let mut c = st.token_cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         c.retain(|_, v| v.until > Instant::now());
@@ -414,7 +432,18 @@ pub async fn principal_from_bearer(st: &AppState, tok: &str) -> AppResult<Princi
     let cu = match cached {
         Some(cu) => cu,
         None => {
-            let (user_id, user, scope) = fetch_user_full(st, tok).await?;
+            let (user_id, user, scope) = match fetch_user_full(st, tok).await {
+                Ok(v) => v,
+                Err(AppError::Unauthorized) => {
+                    let mut bad = lock(&st.bad_tokens);
+                    if bad.len() > 50_000 {
+                        bad.clear();
+                    }
+                    bad.insert(key, Instant::now() + Duration::from_secs(60));
+                    return Err(AppError::Unauthorized);
+                }
+                Err(e) => return Err(e),
+            };
             let _ = st.db.upsert_user(&user_id, &user);
             let cu = CachedUser { user_id, user, scope, until: Instant::now() + Duration::from_secs(300) };
             let mut c = st.token_cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -524,6 +553,16 @@ impl FromRequestParts<AppState> for MaybeUser {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn safe_next_refuses_control_characters() {
+        assert_eq!(safe_next(Some("/globe?x=1")), "/globe?x=1");
+        assert_eq!(safe_next(Some("/\t/evil.com")), "/");
+        assert_eq!(safe_next(Some("/ /evil.com")), "/");
+        assert_eq!(safe_next(Some("//evil.com")), "/");
+        assert_eq!(safe_next(Some("https://evil.com")), "/");
+    }
+
     use super::*;
 
     #[test]

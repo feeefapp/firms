@@ -36,7 +36,10 @@ pub fn get(st: &AppState, id: &str) -> AppResult<Value> {
 }
 
 fn valid_name(n: &str) -> bool {
-    !n.is_empty() && n.len() <= 40 && n.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    !n.is_empty()
+        && n.len() <= 40
+        && !n.starts_with('-')
+        && n.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
 }
 
 /// Queue a region build: `python3 tools/harmonize.py --name --title --country --bbox`.
@@ -59,14 +62,15 @@ pub fn build_region(st: &AppState, user_id: &str, name: &str, title: Option<&str
     if let Some(j) = st.db.active_job("region", &args)? {
         return Ok(job_json(&j));
     }
+    if st.db.active_jobs_of(user_id)? >= 2 {
+        return Err(AppError::bad("you already have two region builds queued or running; wait for one to finish"));
+    }
+    // `--key=value` keeps a value that starts with '-' from being read as another option.
     let argv = vec![
         "harmonize.py".to_owned(),
-        "--name".into(),
-        name.into(),
-        "--title".into(),
-        title.into(),
-        "--country".into(),
-        country.into(),
+        format!("--name={name}"),
+        format!("--title={title}"),
+        format!("--country={country}"),
         format!("--bbox={bb}"),
     ];
     start(st, "region", args, Some(user_id), argv, Duration::from_secs(8 * 3600))

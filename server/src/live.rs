@@ -173,7 +173,7 @@ struct Cell {
     frp: f64,
 }
 
-/// Fire-day cells per satellite index (legacy-sim liveCells): MODIS needs raw confidence ≥ 30,
+/// Fire-day cells per satellite index: MODIS needs raw confidence ≥ 30,
 /// VIIRS drops `low`; cell = (local solar day, floor(lat/0.02), floor(lon/0.02)).
 /// (local solar day, lat cell, lon cell) -> (pixels, FRP sum)
 pub type CellMap = HashMap<(i64, i64, i64), (u32, f64)>;

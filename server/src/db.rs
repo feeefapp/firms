@@ -267,6 +267,15 @@ impl Db {
             .optional()?)
     }
 
+    /// Queued or running jobs started by one user.
+    pub fn active_jobs_of(&self, user_id: &str) -> AppResult<i64> {
+        Ok(self.conn().query_row(
+            "SELECT COUNT(*) FROM jobs WHERE user_id=?1 AND status IN ('queued','running')",
+            params![user_id],
+            |r| r.get(0),
+        )?)
+    }
+
     pub fn queued_count(&self) -> AppResult<i64> {
         Ok(self
             .conn()

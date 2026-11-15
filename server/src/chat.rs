@@ -1,4 +1,4 @@
-//! In-app agent, Lab-style (docs/AGENT_MCP.md §4): AI catalog (ported from feeef `buildChatCatalog`),
+//! In-app agent, Lab-style: AI catalog (ported from feeef `buildChatCatalog`),
 //! SQLite conversations, and turns streamed as the **AI SDK UI message stream v1**
 //! (`X-Vercel-AI-UI-Message-Stream: v1`, frames `id: <seq>\nevent: <type>\ndata: <json>`).
 //!
@@ -99,10 +99,6 @@ pub fn output_rate(m: &Value) -> f64 {
     rates.into_iter().filter(|r| *r > 0.0).reduce(f64::max).unwrap_or(f64::INFINITY)
 }
 
-pub fn middle(count: usize) -> usize {
-    count.saturating_sub(1) / 2
-}
-
 /// model_ladder.spread: up to `limit` items spread evenly from the cheapest to the most capable.
 pub fn spread<T: Clone + PartialEq>(sorted: &[T], limit: usize) -> Vec<T> {
     if sorted.len() <= limit {
@@ -176,8 +172,8 @@ fn ladder_from_collection(collection: Option<&Value>, accept: &dyn Fn(&Value) ->
     if stops.is_empty() {
         return None;
     }
-    let n = stops.len();
-    Some(json!({ "id": c["id"], "name": c["name"], "source": "cloud", "stops": stops, "defaultIndex": middle(n) }))
+    // Rungs are ranked lightest first; the lightest is the default (fast and cheap for tool loops).
+    Some(json!({ "id": c["id"], "name": c["name"], "source": "cloud", "stops": stops, "defaultIndex": 0 }))
 }
 
 fn catalog_ladder(id: &str, name: &str, models: &[Value], limit: usize) -> Option<Value> {
@@ -202,8 +198,7 @@ fn catalog_ladder(id: &str, name: &str, models: &[Value], limit: usize) -> Optio
     if stops.is_empty() {
         return None;
     }
-    let n = stops.len();
-    Some(json!({ "id": id, "name": name, "source": "catalog", "stops": stops, "defaultIndex": middle(n) }))
+    Some(json!({ "id": id, "name": name, "source": "catalog", "stops": stops, "defaultIndex": 0 }))
 }
 
 /// chat_catalog.buildChatCatalog (no free pin: Firms never sponsors turns; `free` is the cheapest
@@ -239,6 +234,14 @@ pub fn build_catalog(all: &[Value], collection: Option<&Value>, now_ms: i64) -> 
         })
         .collect();
     json!({ "ladder": ladder, "free": free, "reviewed": reviewed.is_some(), "models": models })
+}
+
+/// feeef's API wraps every body in `{ "data": … }`; Cloud answers bare. Accept both.
+fn unwrap_data(v: Value) -> Value {
+    match v {
+        Value::Object(mut o) if o.get("data").is_some_and(Value::is_object) && !o.contains_key("models") => o.remove("data").unwrap_or_default(),
+        other => other,
+    }
 }
 
 fn unavailable(reason: &str) -> Value {
@@ -296,9 +299,9 @@ async fn catalog(State(st): State<AppState>, User(p): User) -> Json<Value> {
     };
     let collection = match chat {
         Ok(Some(c)) => Some(c),
-        Ok(None) => fetch_json(&st, &token, "ai/collections/text").await.ok().flatten(),
-        Err(_) => fetch_json(&st, &token, "ai/collections/text").await.ok().flatten(),
-    };
+        Ok(None) | Err(_) => fetch_json(&st, &token, "ai/collections/text").await.ok().flatten(),
+    }
+    .map(unwrap_data);
     let list: Vec<Value> = models["data"].as_array().cloned().or_else(|| models.as_array().cloned()).unwrap_or_default();
     let mut out = build_catalog(&list, collection.as_ref(), chrono::Utc::now().timestamp_millis());
     let has = out["ladder"].is_object();
@@ -652,6 +655,10 @@ Rules:\n\
 - Prefer cards: get_calendar, get_anomalies, get_trend, search_hotspots, compare_algorithms and rank_regions results are \
 shown to the user as visual cards, so summarize the key points in 1–4 sentences instead of repeating tables.\n\
 - Resolve place names with find_region. When the user asks to show/open/display something in the app, call apply_view.\n\
+- The globe page is yours to drive with apply_view (page \"globe\"): change the day or a range, filter by country, satellites, \
+sensors, confidence, FRP or day/night, fly the camera, draw an area. The context's `globe` field says what is on screen right \
+now (mode, period, country, camera, visible counts per satellite, the selected pixel); use it to answer about what the user sees, \
+and range_summary (any range), search_hotspots / hotspot_stats (1–5 days) or live_convert for the numbers you need.\n\
 - Explain uncertainty when it matters: monthly values carry about 10% error (measured WAPE per region; about 7% is the \
 noise floor), months before 2003 and the running month are less certain, and differences smaller than that are noise.\n\
 - build_region starts a long background download and needs the user's approval; only call it when they ask to add a region.\n\
@@ -1174,7 +1181,7 @@ mod tests {
         let stops: Vec<&str> = c["ladder"]["stops"].as_array().unwrap().iter().map(|s| s["modelId"].as_str().unwrap()).collect();
         assert_eq!(stops.len(), 5);
         assert_eq!(c["ladder"]["source"], "catalog");
-        assert_eq!(c["ladder"]["defaultIndex"], 2);
+        assert_eq!(c["ladder"]["defaultIndex"], 0); // the lightest rung
         // cheapest first: m0-dup comes before m0 in the input order? m0 (rate 9) was first for canonical m0
         let rates: Vec<f64> = c["ladder"]["stops"].as_array().unwrap().iter().map(|s| s["priceUsd"].as_f64().unwrap()).collect();
         assert!(rates.windows(2).all(|w| w[0] <= w[1]));
@@ -1197,15 +1204,16 @@ mod tests {
         assert_eq!(stops, vec!["openai/a", "openai/c"]);
         assert_eq!(c["free"], "openai/a");
         assert_eq!(c["models"].as_array().unwrap().len(), 2); // reviewed roster only
+        assert_eq!(c["ladder"]["defaultIndex"], 0);
+        // feeef's API wraps the collection in { data }: it must still be read as the reviewed roster.
+        let wrapped = build_catalog(&all, Some(&unwrap_data(json!({ "data": col }))), chrono::Utc::now().timestamp_millis());
+        assert_eq!(wrapped["ladder"]["source"], "cloud");
     }
 
     #[test]
     fn spread_matches_feeef() {
         let xs: Vec<i32> = (0..10).collect();
         assert_eq!(spread(&xs, 5), vec![0, 2, 5, 7, 9]);
-        assert_eq!(middle(5), 2);
-        assert_eq!(middle(4), 1);
-        assert_eq!(middle(0), 0);
     }
 
     #[tokio::test]

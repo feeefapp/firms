@@ -1,6 +1,6 @@
-# Firms — harmonized MODIS/VIIRS fire calendar (feeef app)
+# Firms — architecture
 
-Deployed at **https://firms.apps.feeef.dev** (Dokploy on 144.202.5.218, Dockerfile build from private repo `feeefapp/firms`).
+Live at **https://firms.apps.feeef.dev**, built from this repository's Dockerfile.
 One container: a Rust server (axum 0.8) that serves the React SPA, the JSON API, an MCP endpoint and the AI agent.
 
 ## Repository layout
@@ -9,10 +9,9 @@ One container: a Rust server (axum 0.8) that serves the React SPA, the JSON API,
 server/        Rust crate `firms-server` (axum 0.8, tokio, tower-http, reqwest rustls, rusqlite bundled, serde)
 web/           Vite + React 19 + TypeScript SPA on @feeef.dev/ui (github:feeefapp/ui#v0.14.5), react-router 7
 tools/         Python harmonization (harmlib.py, harmonize.py, build_harm_data.py) + fetch_data.py (one globe day)
-data/          seed data shipped in the image: regions/*.json, benchmark.json, day/2026-11-01.js
-reference/     legacy-sim.html — the previous single-file simulation (three.js globe, panel logic) to port from
+data/          seed data shipped in the image: regions/*.json, benchmark.json (globe days are built on demand into day/)
 docs/          this file
-Dockerfile     node:22 (web build, BuildKit secret gh_token for the private UI kit) → rust:1-slim-bookworm → debian:bookworm-slim + python3 + tini
+Dockerfile     node:22 (web build; BuildKit secret gh_token for the UI kit, else web/prebuilt) → rust:1-slim-bookworm → debian:bookworm-slim + python3 + tini
 ```
 
 ## Environment (all prefixed FIRMS_)
@@ -24,7 +23,7 @@ Dockerfile     node:22 (web build, BuildKit secret gh_token for the private UI k
 | FIRMS_FEEEF_API_URL | `https://api.beta.feeef.org/v1` |
 | FIRMS_FEEEF_ACCOUNTS_URL | `https://accounts.beta.feeef.org` |
 | FIRMS_FEEEF_CLIENT_ID / FIRMS_FEEEF_CLIENT_SECRET | confidential OAuth app "Firms" (beta) |
-| FIRMS_FEEEF_REDIRECT_URI | `{PUBLIC_ORIGIN}/auth/feeef/callback` (both prod and localhost:8787 are registered) |
+| FIRMS_FEEEF_REDIRECT_URI | `{PUBLIC_ORIGIN}/auth/feeef/callback` |
 | FIRMS_MAP_KEY | NASA FIRMS MAP_KEY (server-side only, never sent to the browser) |
 | FIRMS_DATA_DIR | writable volume, default `/data` (sqlite `firms.db`, `regions/`, `cache/`, `raw/`, `day/`) |
 | FIRMS_SEED_DIR | read-only seed copied into DATA_DIR on first start (image path `/app/seed`) |
@@ -33,7 +32,7 @@ Dockerfile     node:22 (web build, BuildKit secret gh_token for the private UI k
 | FIRMS_AI_MODEL | Cloud model id for the agent (e.g. `openai/gpt-4.1-mini`; check `GET /v1/ai/models`) |
 | FIRMS_SESSION_KEY | 32+ random bytes (hex) for cookie signing |
 
-Local dev reads `firms/.env` (gitignored).
+Local dev reads `.env` at the repository root (gitignored); see `.env.example`.
 
 ## Sign in with feeef (OAuth2 code + PKCE S256, confidential client)
 
@@ -60,11 +59,14 @@ Local dev reads `firms/.env` (gitignored).
 | `GET /api/benchmark` | `data/benchmark.json` |
 | `GET /api/hotspots?bbox&date&days=1..5&sources&min_conf=0|1|2&min_frp&format=json|csv` | rows from the FIRMS area API (cached on disk per request key) |
 | `GET /api/live?bbox&date` | per satellite `{rows, fire_day_cells}`, and VIIRS→Aqua-equivalent conversions `{ratio, ratio_month, frp_season, ensemble}` for N, N20, N21 using the region calibration that contains the bbox or the pooled global one |
-| `GET /api/day?date` | globe snapshot for one day (format of `data/day/*.js` without the `window.FIRMS_DATA=` prefix); built by `tools/fetch_data.py` job if missing |
+| `GET /api/day?date` | globe snapshot for one day (columns `lat, lon, t, sat, scan, track, frp, b4, b5, conf, craw, dn, ver` + satellites with TLEs); a missing day of the last 60 is built by a `tools/fetch_data.py` job (signed-in users only) |
+| `GET /api/range?from&to&country|bbox` | every detection in an area over any range, same columns as a day (no TLEs). A country with a local archive (a built region keeps `raw/<region>/` yearly FIRMS files) is read from disk for any length since 2001; elsewhere the range is stitched from 5-day FIRMS area calls, up to 62 days; at most 600 000 rows |
 | `POST /api/regions` (auth) `{name,title,country,bbox}` | `{job}` — runs `python3 tools/harmonize.py` into DATA_DIR |
 | `GET /api/jobs/:id` | `{id,status:queued|running|done|failed,log_tail,result}` |
 | `GET/POST/DELETE /api/keys` (auth) | personal API keys `firms_…` (shown once, stored hashed) for MCP/API |
-| `POST /api/agent` (auth, SSE) `{messages:[{role,content}], context:{page,region,from,to,algorithm,bbox}}` | events: `text`, `tool_call`, `tool_result`, `apply` (`{region?,from?,to?,algorithm?,baseline?,bbox?,page?}` the UI applies), `done`, `error` |
+| `/api/agent/*` (auth) | the in-app agent: model catalog, conversations, turns streamed as the AI SDK UI message stream v1 (see server/README.md) |
+
+Per-IP limits (429 + Retry-After): FIRMS-backed endpoints 40/min, `/oauth/register` 20/h, `/oauth/token` 120/min, `/mcp` 240/min.
 
 Algorithm keys (series in region JSON): `ensemble_adaptive` (recommended), `ensemble_geom_adaptive`, `ensemble`,
 `frp_season_adaptive`, `ratio_month_adaptive`, `ratio`, `naive`, `raw_rows`, `aqua_only`. Evaluation mapping (region `eval`):
@@ -79,24 +81,31 @@ Fire-day cell = (local solar day = UTC + lon/15 h, floor(lat/0.02), floor(lon/0.
 Live conversion for month m, season s=floor(m/3), C cells: frp = Σ rho_season[s][bin(frp_cell)] + extra[m]·C; ratio_month = k_month[m]·C;
 ensemble = (frp + ratio_month)/2; ratio = k_single·C. Global calibration = pooled sums of all regions (see tools/build_harm_data.py).
 
-## MCP (Streamable HTTP, stateless) — `POST /mcp`
+## MCP — `POST /mcp`
 
-JSON-RPC: `initialize`, `ping`, `tools/list`, `tools/call`; notifications → 202; GET/DELETE → 405. Protocol versions
-2025-11-25, 2025-06-18, 2025-03-26. Auth: `Authorization: Bearer firms_…` (API key) or a feeef access token. Tools (same
-handlers as the API): `list_regions`, `get_calendar`, `compare_algorithms`, `get_benchmark`, `search_hotspots`, `live_convert`,
-`build_region`, `job_status`, `explain_method`. Reference implementation style: `/Users/mohamad/Desktop/projects/cod_pilot_clone/cloud/rust/services/ads/src/mcp.rs`.
+Streamable HTTP, stateless, protocol versions 2026-07-28 (`server/discover`), 2025-11-25, 2025-06-18 and 2025-03-26. Tools,
+resources (+ templates), prompts and completion; tools carry `outputSchema` and return `structuredContent`; two MCP Apps
+widgets (`ui://firms/calendar-v1.html`, `ui://firms/hotspots-v1.html`). Auth: `Authorization: Bearer` with an OAuth access
+token (Firms is its own authorization server: RFC 9728 / 8414 metadata, dynamic registration and client ID metadata
+documents, PKCE, rotating refresh tokens), a personal API key `firms_…`, or a feeef access token. Details in server/README.md.
 
 ## AI agent
 
-Uses **feeef Cloud AI with the signed-in user's token** (`POST {API}/ai/streams`, `stream:true`, chat/completions with
-OpenAI-style `tools`; header `Idempotency-Key` unique per step; needs scope `ai.generate`; billed to the user's feeef wallet).
-Server-side loop (max 6 steps): the model calls the same tools as MCP plus `apply_filters` (emits an `apply` event).
-If AI is unavailable (no scope, 4xx/5xx, beta without Cloud AI), fall back to a deterministic parser (regions by name/country,
-"last N months/years", years, algorithm names, "anomaly") that still emits `apply` + a short text answer, and say AI was unavailable.
+feeef Cloud AI with the signed-in user's token (`POST {API}/ai/streams`, chat/completions with OpenAI-style tools; billed
+to the user's feeef wallet). The model list is the reviewed `chat` collection (lightest model by default). The agent uses
+the same tool registry as MCP plus `apply_view`, which drives the web app through its address — including the globe
+(day or range, country, satellites, sensors, confidence, FRP, day/night, camera, area). The web sends what is on screen
+(`context`, with a `globe` object on the globe page) with every turn.
+
+## Globe address
+
+`/globe?date=…|range=from..to&country=dz&bbox=W,S,E,N&sats=A,N20&sensor=modis,viirs&conf=1&frp=5&dn=night&cam=lat,lon,altKm&tab=area|record`
+(web/src/pages/globe/globe-state.ts). Filters run in the fire shader and in picking alike; the country mask is a
+point-in-polygon test on Natural Earth 1:50m shapes.
 
 ## Front-end rules
 
-Follow `node_modules/@feeef.dev/ui/DESIGN.md` and AGENTS.md of the kit (and `feeef.all/lite.feeef.org/AGENTS.md` as the app template):
+Follow `node_modules/@feeef.dev/ui/DESIGN.md` and AGENTS.md of the kit:
 Provider → Scaffold(side, appBar) → content; one filled button per view; ToolbarGroup bubbles; TextField with floating label and hint;
 SegmentedControl for modes; Sheet/Presentation for overlays; `--lab-*` tokens only, never repaint kit components; RTL-first (Arabic default,
 English second), check light/dark/RTL/360px. Simple params: Region + Period preset (12 months / 5 years / all / custom) + View (count/anomaly);

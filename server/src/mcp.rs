@@ -1,4 +1,4 @@
-//! MCP over Streamable HTTP (docs/AGENT_MCP.md §2), dual-era:
+//! MCP over Streamable HTTP, dual-era:
 //!
 //! - 2026-07-28 (modern, stateless): every request carries `_meta` protocol version + client
 //!   capabilities; `server/discover`; results carry `resultType`; elicitation through MRTR

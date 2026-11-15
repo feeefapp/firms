@@ -1,14 +1,13 @@
-import { Clock, Info, ZoomIn } from 'lucide-react'
+import { BoxSelect, Clock, Info, Trash2, ZoomIn } from 'lucide-react'
 import { Button } from '@feeef.dev/ui/primitives/button'
 import { ListRow, ListSection } from '@feeef.dev/ui/primitives/list'
-import { Sheet } from '@feeef.dev/ui/containers/sheet'
 import { ErrorState, LoadingState, Notice, Table, Td, Th } from '@/components/ui/data'
 import { api } from '@/lib/api'
 import { errorMessage } from '@/lib/errors'
 import { formatBbox, formatDate, formatNumber } from '@/lib/format'
 import { useRemote } from '@/lib/use-remote'
 import { t } from '@/i18n/locale'
-import { SYSTEM_COLORS, type PickedRecord } from './engine'
+import { SYSTEM_COLORS, type DaySat, type PickedRecord, type Stats } from './engine'
 
 const hhmm = (t: number) => new Date(t * 1000).toISOString().slice(11, 16)
 const kelvin = (v: number | null) => (v == null ? '–' : `${v.toFixed(1)} K ≈ ${(v - 273.15).toFixed(0)}°C`)
@@ -24,7 +23,7 @@ export function RecordDetails({ record: r, onZoom, onGoTo }: { record: PickedRec
         <span style={{ color: SYSTEM_COLORS[r.sat.system] }} aria-hidden>
           ■{' '}
         </span>
-        {r.sat.instrument} · {t('m.globe.observedAt', { time: hhmm(r.time) })}
+        {r.sat.symbol} {r.sat.name} · {r.sat.instrument} · {formatDate(new Date(r.time * 1000).toISOString().slice(0, 10))} · {t('m.globe.observedAt', { time: hhmm(r.time) })}
       </p>
       <ListSection header={t('m.globe.measured')}>
         {fact(t('m.globe.f.position'), `${r.lat.toFixed(4)}, ${r.lon.toFixed(4)}`)}
@@ -37,9 +36,9 @@ export function RecordDetails({ record: r, onZoom, onGoTo }: { record: PickedRec
         {r.version ? fact(t('m.globe.f.version'), r.version) : null}
       </ListSection>
       <ListSection header={t('m.globe.geometry')}>
-        {fact(t('m.globe.f.altitude'), `${formatNumber(r.altitudeKm)} km`)}
-        {fact(t('m.globe.f.nadir'), `${formatNumber(r.nadirKm)} km`)}
-        {fact(t('m.globe.f.vza'), `${r.viewZenith.toFixed(0)}°`)}
+        {r.altitudeKm == null ? null : fact(t('m.globe.f.altitude'), `${formatNumber(r.altitudeKm)} km`)}
+        {r.nadirKm == null ? null : fact(t('m.globe.f.nadir'), `${formatNumber(r.nadirKm)} km`)}
+        {r.viewZenith == null ? <ListRow static title={t('m.globe.noOrbit')} /> : fact(t('m.globe.f.vza'), `${r.viewZenith.toFixed(0)}°`)}
       </ListSection>
       <ListSection header={t('m.globe.nearby')} footer={t('m.globe.nearbyHint')}>
         <ListRow static title={t('m.globe.samePass', { count: r.samePass })} trailing={<span dir="ltr">{formatNumber(r.samePassFrp, 1)} MW</span>} />
@@ -69,21 +68,72 @@ export function RecordDetails({ record: r, onZoom, onGoTo }: { record: PickedRec
  * The box on the globe: FIRMS rows and fire-day cells per satellite, the VIIRS fire-days turned
  * into Aqua-equivalent by each method, and Aqua's own count (which drifted to ~15:15 local).
  */
-export function LiveSheet({
-  open,
-  onClose,
+export function AreaPanel({
   bbox,
   date,
   regions,
+  stats,
+  sats,
+  onZoom,
+  onRedraw,
+  onClear,
 }: {
-  open: boolean
-  onClose: () => void
-  bbox: number[] | null
-  date?: string
+  bbox: number[]
+  /** The day shown, or null for a range (the conversion is per day). */
+  date: string | null
   regions: { name: string; title: string; bbox: number[] }[]
+  /** Records of the loaded data inside the box, with every filter applied. */
+  stats: Stats | null
+  sats: DaySat[]
+  onZoom: () => void
+  onRedraw: () => void
+  onClear: () => void
 }) {
-  const key = open && bbox ? `${bbox.join(',')}|${date ?? ''}` : null
-  const live = useRemote(key, (signal) => api.live({ bbox: bbox!.join(','), date }, signal))
+  return (
+    <div className="fm-stack">
+      <p className="fm-note">
+        <span dir="ltr">{formatBbox(bbox)}</span>
+      </p>
+      <div className="fm-actions">
+        <Button variant="tonal" onClick={onZoom}>
+          <ZoomIn aria-hidden />
+          {t('m.globe.zoomTo')}
+        </Button>
+        <Button variant="text" onClick={onRedraw}>
+          <BoxSelect aria-hidden />
+          {t('m.globe.redraw')}
+        </Button>
+        <Button variant="text" onClick={onClear}>
+          <Trash2 aria-hidden />
+          {t('m.globe.clearBox')}
+        </Button>
+      </div>
+      {stats ? (
+        <ListSection header={t('m.globe.inBox')} footer={t('m.globe.inBoxHint')}>
+          <ListRow static title={t('m.globe.visible')} trailing={formatNumber(stats.total)} />
+          <ListRow static title={t('m.globe.frpSum')} trailing={<span dir="ltr">{formatNumber(stats.frp, 0)} MW</span>} />
+          {stats.bySat.map((n, i) =>
+            n ? (
+              <ListRow
+                key={sats[i].code}
+                static
+                leading={<i className="fm-swatch" style={{ background: SYSTEM_COLORS[sats[i].system] }} aria-hidden />}
+                title={<span dir="ltr">{`${sats[i].symbol} ${sats[i].name}`}</span>}
+                trailing={formatNumber(n)}
+              />
+            ) : null,
+          )}
+        </ListSection>
+      ) : null}
+      {date ? <Conversions bbox={bbox} date={date} regions={regions} /> : <Notice tone="info" icon={<Info size={16} />}>{t('m.globe.rangeConversion')}</Notice>}
+    </div>
+  )
+}
+
+/** VIIRS fire-days of one day in the box, as Aqua-equivalent (`/api/live`). */
+function Conversions({ bbox, date, regions }: { bbox: number[]; date: string; regions: { name: string; title: string; bbox: number[] }[] }) {
+  const key = `${bbox.join(',')}|${date}`
+  const live = useRemote(key, (signal) => api.live({ bbox: bbox.join(','), date }, signal))
   const data = live.data
   const inside = bbox ? regions.find((r) => bbox[0] >= r.bbox[0] - 0.01 && bbox[1] >= r.bbox[1] - 0.01 && bbox[2] <= r.bbox[2] + 0.01 && bbox[3] <= r.bbox[3] + 0.01) : null
   const methods = [
@@ -93,25 +143,14 @@ export function LiveSheet({
     ['ratio', t('m.alg.ratio')],
   ] as const
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => (next ? undefined : onClose())}
-      label={t('m.live.title')}
-      title={t('m.live.title')}
-      detents={['medium', 'large']}
-      regular="card"
-      cardWidth={420}
-      modal={false}
-    >
-      {!bbox ? null : live.error && !data ? (
+    <>
+      {live.error && !data ? (
         <ErrorState title={t('m.live.failed')} message={errorMessage(live.error)} onRetry={live.reload} />
       ) : !data ? (
         <LoadingState label={t('m.live.loading')} />
       ) : (
         <div className="fm-stack" aria-busy={live.loading || undefined}>
-          <p className="fm-note">
-            <span dir="ltr">{formatBbox(bbox)}</span> · {formatDate(data.date || date)}
-          </p>
+          <p className="fm-note">{formatDate(data.date || date)}</p>
           {inside ? <Notice tone="info" icon={<Info size={16} />}>{t('m.live.inside', { region: inside.title })}</Notice> : null}
           <section className="fm-stack" aria-label={t('m.live.perSat')}>
             <h3 className="fm-subhead">{t('m.live.perSat')}</h3>
@@ -191,6 +230,6 @@ export function LiveSheet({
           </section>
         </div>
       )}
-    </Sheet>
+    </>
   )
 }

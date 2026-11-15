@@ -1,5 +1,5 @@
 /**
- * AI SDK UI message stream v1 — the subset Firms speaks (docs/AGENT_MCP.md §4). Ported from feeef
+ * AI SDK UI message stream v1 — the subset Firms speaks. Ported from feeef
  * Lab (`backend/inertia/components/lab/chat/types.ts`); unknown chunk types are ignored by readers.
  */
 
@@ -68,6 +68,16 @@ export type FirmsView = {
   view?: string
   bbox?: number[] | string
   date?: string
+  /** Globe (apply_view): any range, area and pixel filters, the camera. */
+  range?: [string, string]
+  country?: string
+  satellites?: string[]
+  sensors?: string[]
+  min_confidence?: number
+  min_frp?: number
+  day_night?: 'all' | 'day' | 'night'
+  camera?: { lat: number; lon: number; altitude_km?: number }
+  clear_bbox?: boolean
 }
 
 export type FirmsCardKind = 'calendar' | 'anomalies' | 'trend' | 'hotspots' | 'compare' | 'ranking'
