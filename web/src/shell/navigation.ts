@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { CalendarDays, CodeXml, Earth, GitCompareArrows, MapPinned, Search, Sparkles } from 'lucide-react'
+import { BookOpen, CalendarDays, CodeXml, Earth, GitCompareArrows, MapPinned, Search, Sparkles } from 'lucide-react'
 import { t } from '@/i18n/locale'
 
 export type NavItem = { id: string; path: string; label: string; icon: LucideIcon }
@@ -13,6 +13,7 @@ export function navItems(): NavItem[] {
     { id: 'search', path: '/search', label: t('m.nav.search'), icon: Search },
     { id: 'assistant', path: '/assistant', label: t('m.nav.assistant'), icon: Sparkles },
     { id: 'regions', path: '/regions', label: t('m.nav.regions'), icon: MapPinned },
+    { id: 'guide', path: '/guide', label: t('m.nav.guide'), icon: BookOpen },
     { id: 'developers', path: '/developers', label: t('m.nav.developers'), icon: CodeXml },
   ]
 }
@@ -32,4 +33,5 @@ export const PAGE_PATHS: Record<string, string> = {
   assistant: '/assistant',
   regions: '/regions',
   developers: '/developers',
+  guide: '/guide',
 }

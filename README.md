@@ -6,7 +6,7 @@ years without the jump that appears when one sensor hands over to the other. It 
 Space Apps 2026 challenge *Harmonization of MODIS and VIIRS Hot Spots*.
 
 Live: **https://firms.apps.feeef.dev** (Arabic and English). New to the topic? Read the
-**[plain-language guide](https://firms.apps.feeef.dev/guide.html)** ([`web/public/guide.html`](web/public/guide.html)):
+**[plain-language guide](https://firms.apps.feeef.dev/guide)** ([`web/src/pages/guide`](web/src/pages/guide)):
 cameras vs satellites, fire-days, the conversion, how it was tested, the 7% floor, results per
 region (Algeria included), the 2022 orbit drift and how to read the calendar, with interactive charts.
 

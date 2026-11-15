@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Provider } from '@feeef.dev/ui/provider'
+import type { ThemeConfig } from '@feeef.dev/ui/theme-config'
 import { LoadingState } from '@/components/ui/data'
 import { ToastProvider } from '@/components/ui/toast'
 import { ConfirmProvider } from '@/components/ui/overlays'
@@ -19,6 +20,10 @@ const SearchPage = lazy(() => import('@/pages/search'))
 const AssistantPage = lazy(() => import('@/pages/assistant'))
 const RegionsPage = lazy(() => import('@/pages/regions'))
 const DevelopersPage = lazy(() => import('@/pages/developers'))
+const GuidePage = lazy(() => import('@/pages/guide/guide-page'))
+
+/** Firms' look: the kit's defaults with a blue primary (selection, focus, the main action). */
+const THEME: ThemeConfig = { primary: '#2a78d6' }
 
 export function App() {
   const navigate = useNavigate()
@@ -29,7 +34,7 @@ export function App() {
     else navigate(to)
   }
   return (
-    <Provider i18n={{ locale, dir, availableLocales: [...LOCALES], translations: messages, navigate: go }} services={{ navigate: go }}>
+    <Provider theme={THEME} i18n={{ locale, dir, availableLocales: [...LOCALES], translations: messages, navigate: go }} services={{ navigate: go }}>
       <ToastProvider>
         <ConfirmProvider>
           <SessionProvider>
@@ -61,6 +66,7 @@ function Workspace() {
             <Route path="assistant" element={<AssistantPage />} />
             <Route path="regions" element={<RegionsPage />} />
             <Route path="developers" element={<DevelopersPage />} />
+            <Route path="guide" element={<GuidePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

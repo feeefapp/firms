@@ -1,0 +1,322 @@
+/* The guide: layout on kit tokens. The chart variables map the guide's figure colours onto the
+   theme (VIIRS and the accent are the primary; MODIS keeps its orange), so figures follow light,
+   dark and the app's primary colour. */
+.fm-guide {
+  --accent: var(--lab-primary);
+  --on-accent: var(--lab-on-primary, #fff);
+  --accent-soft: color-mix(in srgb, var(--lab-primary) 14%, transparent);
+  --viirs: var(--lab-primary);
+  --modis: #d9822b;
+  --fire: #d6452f;
+  --ink: var(--lab-ink);
+  --ink2: color-mix(in srgb, var(--lab-ink) 75%, transparent);
+  --muted: var(--lab-muted);
+  --rule: var(--lab-line);
+  --grid: color-mix(in srgb, var(--lab-line) 70%, transparent);
+  --grey: color-mix(in srgb, var(--lab-muted) 45%, transparent);
+  --paper: var(--lab-surface-soft);
+  --good: var(--lab-success, #0f8a3e);
+  --bad: #c4312f;
+  display: grid;
+  gap: var(--lab-shell-gap, 8px);
+  text-align: start;
+}
+html[data-lab-theme='dark'] .fm-guide {
+  --modis: #e59a4b;
+  --fire: #ef6b52;
+  --bad: #ef6b6b;
+}
+.fm-g-body {
+  display: grid;
+  gap: var(--lab-space-5, 24px);
+  max-width: 76ch;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--lab-ink);
+}
+.fm-g-body p,
+.fm-g-body ul,
+.fm-g-body ol {
+  margin: 0;
+}
+.fm-g-short h3,
+.fm-g-q > h3 {
+  margin: 0 0 var(--lab-space-2, 8px);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--lab-ink);
+}
+.fm-g-q {
+  display: grid;
+  gap: var(--lab-space-3, 12px);
+}
+.fm-g-list {
+  display: grid;
+  gap: 6px;
+  padding-inline-start: 22px;
+}
+.fm-g-sec {
+  scroll-margin-top: calc(var(--lab-toolbar-item, 44px) + 3 * var(--lab-shell-gap, 8px));
+}
+/* A defined word: text that opens its definition. */
+.fm-g-term {
+  padding: 0;
+  border: 0;
+  border-bottom: 1.5px dotted var(--lab-primary);
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: help;
+}
+.fm-g-term:hover,
+.fm-g-term[data-state='open'] {
+  background: var(--accent-soft);
+}
+.fm-g-pop {
+  z-index: 60;
+  display: grid;
+  gap: 6px;
+  width: min(340px, calc(100vw - 32px));
+  padding: var(--lab-space-3, 12px) var(--lab-space-4, 16px);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--lab-ink);
+}
+.fm-g-pop p {
+  margin: 0;
+}
+.fm-g-pop-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+.fm-g-pop-head span {
+  font-size: 12px;
+  color: var(--lab-muted);
+}
+/* Figures sit on the panel as soft blocks (panels never nest). */
+.fm-g-fig {
+  display: grid;
+  gap: var(--lab-space-3, 12px);
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: var(--lab-space-4, 16px);
+  border-radius: var(--lab-radius-group, 16px);
+  background: var(--lab-surface-soft);
+}
+.fm-g-body:has(.fm-g-fig) {
+  max-width: none;
+}
+.fm-g-body > p,
+.fm-g-body > ul,
+.fm-g-q > p,
+.fm-g-q > ul,
+.fm-g-q > ol {
+  max-width: 76ch;
+}
+.fm-g-fig-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--lab-space-2, 8px);
+}
+.fm-g-fig-head h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--lab-ink);
+}
+.fm-g-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lab-shell-gap, 8px) var(--lab-space-4, 16px);
+}
+.fm-g-select {
+  min-width: 12rem;
+}
+.fm-g-field {
+  display: grid;
+  gap: 2px;
+  width: min(100%, 260px);
+  font-size: 13px;
+  color: var(--lab-muted);
+}
+.fm-g-field b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--lab-ink);
+}
+.fm-g-readout {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--lab-ink);
+}
+.fm-g-svg {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.fm-g-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.fm-g-tip {
+  position: absolute;
+  z-index: 5;
+  min-width: 150px;
+  padding: 7px 10px;
+  border-radius: var(--lab-radius-control, 10px);
+  background: var(--lab-surface);
+  box-shadow: 0 0 0 1px var(--lab-line), 0 6px 18px rgb(0 0 0 / 0.14);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--lab-ink);
+  pointer-events: none;
+}
+.fm-g-two {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: var(--lab-space-4, 16px);
+  align-items: start;
+}
+@container (max-width: 640px) {
+  .fm-g-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.fm-g-counters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--lab-shell-gap, 8px);
+}
+.fm-g-counters > div {
+  display: grid;
+  gap: 2px;
+  padding: var(--lab-space-2, 8px) var(--lab-space-3, 12px);
+  border-radius: var(--lab-radius-control, 10px);
+  background: var(--lab-surface);
+}
+.fm-g-counters span {
+  font-size: 12px;
+  color: var(--lab-muted);
+}
+.fm-g-counters strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.fm-g-log {
+  display: grid;
+  gap: 2px;
+  min-height: 6em;
+  margin: 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lab-muted);
+}
+.fm-g-modis {
+  color: var(--modis) !important;
+  font-weight: 600;
+}
+.fm-g-viirs,
+.fm-g-accent {
+  color: var(--viirs) !important;
+  font-weight: 600;
+}
+.fm-g-stepno {
+  display: grid;
+  place-items: center;
+  inline-size: 26px;
+  block-size: 26px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--lab-primary);
+  font-weight: 600;
+  font-size: 13px;
+}
+.fm-g-eq {
+  padding: var(--lab-space-4, 16px);
+  overflow-x: auto;
+  border-radius: var(--lab-radius-group, 16px);
+  background: var(--lab-surface-soft);
+  font-size: 22px;
+  text-align: center;
+  white-space: nowrap;
+}
+.fm-g-eqp {
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: help;
+}
+.fm-g-eqp:hover,
+.fm-g-eqp[data-on] {
+  border-bottom-color: var(--lab-primary);
+  background: var(--accent-soft);
+}
+.fm-g-symrow[data-on] td {
+  background: var(--accent-soft);
+}
+.fm-g-sym {
+  font-style: italic;
+  font-size: 17px;
+  white-space: nowrap;
+}
+.fm-g-calc {
+  display: grid;
+  gap: 4px;
+  padding: var(--lab-space-3, 12px) var(--lab-space-4, 16px);
+  overflow-x: auto;
+  border-radius: var(--lab-radius-group, 16px);
+  background: var(--lab-surface-soft);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+.fm-g-calc strong {
+  color: var(--lab-primary);
+}
+.fm-g-legend:empty {
+  display: none;
+}
+.fm-g-ramp {
+  width: 240px;
+  max-width: 100%;
+  height: 9px;
+  border-radius: 3px;
+}
+.fm-g-ramp-labels {
+  display: flex;
+  justify-content: space-between;
+  width: 240px;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--lab-muted);
+}
+.fm-g-chev {
+  transition: transform 0.2s;
+}
+.fm-g-chev[data-open] {
+  transform: rotate(180deg);
+}
+.fm-g-answer {
+  font-weight: 400;
+  color: var(--lab-muted);
+  white-space: normal;
+}
+.fm-g-jump {
+  min-width: 12rem;
+}
+.fm-guide code {
+  font-size: 0.92em;
+}
