@@ -96,6 +96,29 @@
   color: var(--lab-ink);
   pointer-events: none;
 }
+/* The time scrubber floats over the globe just above the dock: no surface, no border. It keeps
+   clear of the card at the leading edge (380 px + the shell gaps). */
+.fm-globe-scrub {
+  position: absolute;
+  bottom: calc(var(--lab-toolbar-item, 44px) + 3 * var(--lab-shell-gap, 8px));
+  inset-inline-start: calc(380px + 4 * var(--lab-shell-gap, 8px));
+  inset-inline-end: calc(2 * var(--lab-shell-gap, 8px));
+  z-index: 3;
+  display: grid;
+  gap: 2px;
+  max-width: 760px;
+  margin-inline: auto;
+  color: #fff;
+}
+.fm-globe-scrub[data-pane] {
+  inset-inline-end: calc(400px + 4 * var(--lab-shell-gap, 8px));
+}
+.fm-globe-scrub .fm-tl-hist {
+  height: 34px;
+  color: #fff;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+}
+
 /* The sheets' stage: the globe between the floating app bar and the dock, so the card and the
    inspector never cover them (the kit lays sheets out inside this element). */
 .fm-globe-stage {

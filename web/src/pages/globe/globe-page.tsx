@@ -108,6 +108,15 @@ export default function GlobePage() {
   )
   const [stage, setStage] = useState<HTMLDivElement | null>(null)
   const [query, setQuery] = useState('')
+  // From the kit's regular breakpoint the card sits at the side, so the scrubber floats above the
+  // dock; below it the card is a bottom sheet over the dock and keeps the scrubber inside.
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    if (!stage) return
+    const ro = new ResizeObserver(([entry]) => setWide(entry.contentRect.width >= 720))
+    ro.observe(stage)
+    return () => ro.disconnect()
+  }, [stage])
 
   // ---------- countries (loaded once) ----------
   const [countries, setCountries] = useState<CountryShape[] | null>(null)
@@ -381,6 +390,11 @@ export default function GlobePage() {
   const tMin = e?.tMin ?? 0
   const at = (v: number) => new Date((tMin + v) * 1000).toISOString()
   const clock = !e ? '--:--' : isRange ? `${formatDate(at(simT).slice(0, 10))} ${at(simT).slice(11, 16)}` : `${at(simT).slice(11, 16)} UTC`
+  const seek = (v: number) => {
+    engine.current?.setPlaying(false)
+    engine.current?.setTime(v)
+    setSimT(v)
+  }
   const busy = load.state === 'loading' || load.state === 'building' || (Boolean(data) && !ready)
   const periodLabel = g.range
     ? `${formatDate(g.range[0])} → ${formatDate(g.range[1])} · ${t('m.globe.days', { count: rangeDays(g.range) })}`
@@ -466,6 +480,12 @@ export default function GlobePage() {
         </div>
       ) : null}
 
+      {wide && ready && e ? (
+        <section className="fm-globe-scrub" data-pane={inspectorOpen || undefined} aria-label={t('m.globe.timeline')}>
+          <Scrubber engine={e} simT={simT} isRange={isRange} onSeek={seek} span={span} at={at} />
+        </section>
+      ) : null}
+
       {/* The sheets' stage: the globe between the floating app bar and the dock. */}
       <div ref={setStage} className="fm-globe-stage" />
       {stage ? (
@@ -523,13 +543,10 @@ export default function GlobePage() {
                         setSpeed(s)
                         e.setSpeed(Number(s))
                       }}
-                      onSeek={(v) => {
-                        e.setPlaying(false)
-                        e.setTime(v)
-                        setSimT(v)
-                      }}
+                      onSeek={seek}
                       span={span}
                       at={at}
+                      scrubber={!wide}
                     />
                   ) : null
                 }
@@ -756,6 +773,7 @@ function Timeline({
   onSeek,
   span,
   at,
+  scrubber,
 }: {
   engine: GlobeEngine
   simT: number
@@ -766,25 +784,36 @@ function Timeline({
   onSeek: (t: number) => void
   span: number
   at: (v: number) => string
+  /** Also show the histogram and slider (phones; on wide screens they float above the dock). */
+  scrubber: boolean
 }) {
   return (
-    <ListSection header={t('m.globe.timeline')}>
+    <ListSection header={scrubber ? t('m.globe.timeline') : t('m.globe.speed')}>
       <div className="fm-tl">
-        <Histogram engine={engine} simT={simT} onSeek={onSeek} />
-        <Slider
-          label={t('m.globe.time')}
-          trackStyle="thin"
-          controlSize="small"
-          min={-600}
-          max={Math.round(span)}
-          step={isRange ? 600 : 10}
-          value={simT}
-          onValueChange={onSeek}
-          getValueText={(v) => (isRange ? `${at(v).slice(0, 10)} ${at(v).slice(11, 16)} UTC` : `${at(v).slice(11, 16)} UTC`)}
-        />
+        {scrubber ? <Scrubber engine={engine} simT={simT} isRange={isRange} onSeek={onSeek} span={span} at={at} /> : null}
         <SegmentedControl label={t('m.globe.speed')} value={speed} onChange={onSpeed} options={speeds.map((s) => ({ value: s, label: isRange ? t(`m.globe.speedRange.${s}`) : `${s}×` }))} />
       </div>
     </ListSection>
+  )
+}
+
+/** Detections over time and the time slider. */
+function Scrubber({ engine, simT, isRange, onSeek, span, at }: { engine: GlobeEngine; simT: number; isRange: boolean; onSeek: (t: number) => void; span: number; at: (v: number) => string }) {
+  return (
+    <>
+      <Histogram engine={engine} simT={simT} onSeek={onSeek} />
+      <Slider
+        label={t('m.globe.time')}
+        trackStyle="thin"
+        controlSize="small"
+        min={-600}
+        max={Math.round(span)}
+        step={isRange ? 600 : 10}
+        value={simT}
+        onValueChange={onSeek}
+        getValueText={(v) => (isRange ? `${at(v).slice(0, 10)} ${at(v).slice(11, 16)} UTC` : `${at(v).slice(11, 16)} UTC`)}
+      />
+    </>
   )
 }
 

@@ -20,6 +20,9 @@ export type CountryShape = {
   bbox: [number, number, number, number]
 }
 
+/** Countries left out of the picker (ISO alpha-2). */
+const EXCLUDED = new Set(['IL'])
+
 let loading: Promise<CountryShape[]> | null = null
 
 export function loadCountries(): Promise<CountryShape[]> {
@@ -39,7 +42,7 @@ export function loadCountries(): Promise<CountryShape[]> {
     for (const f of fc.features) {
       const id = String(f.id ?? '').padStart(3, '0')
       const a2 = iso.numericToAlpha2(id)
-      if (!a2 || !f.geometry) continue
+      if (!a2 || !f.geometry || EXCLUDED.has(a2)) continue
       const g = f.geometry
       const polygons: Ring[][] =
         g.type === 'Polygon' ? [g.coordinates as Ring[]] : g.type === 'MultiPolygon' ? (g.coordinates as Ring[][]) : []
