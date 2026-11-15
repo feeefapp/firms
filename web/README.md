@@ -47,6 +47,9 @@ textures and an archived sample, so its core content does not need a sign-in or 
   labelled sample of 6,000 real detections from 1 November 2026, rather than a live feed.
 - `src/pages/presentation/study.json` is a checked-in snapshot of the four current regional files.
   The headline is the mean regional forward-test WAPE. `notes.ts` loads only in the presenter chunk.
+  The simple speaking script is about 230 words across all 15 slides, leaving time for pauses and
+  interaction within three minutes. Each note fits its initial slide budget at 110 words per minute.
+  Demo action cues are separate from the spoken script; sources stay available for questions.
 - The presenter synchronizes through a per-presentation BroadcastChannel, with a storage-event fallback.
   Pop-ups must be allowed. A separate window or display keeps the notes out of the shared audience view.
 
