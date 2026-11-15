@@ -82,4 +82,6 @@ Claude and OpenAI Codex assisted with code, debugging, analysis interpretation, 
 
 ## Verification
 
-Terms acceptance and original-work/resource attestations must be confirmed by the participant before final submission. A saved project is not submitted for judging until the website confirms submission.
+The participant approved the Terms/Privacy and original-work/resource declarations and confirmed the feeef UI MIT license. The website confirmed "Project Submitted for Judging" with Last Submitted: 15 November 2026 17:40. The participant certificate is now available from the signed-in Profile.
+
+Project entry: https://www.spaceappschallenge.org/2026/find-a-team/spacedev5/?tab=project
