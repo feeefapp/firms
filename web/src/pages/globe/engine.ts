@@ -122,32 +122,6 @@ export const HEAT_KINDS = ['industrial', 'offshore', 'volcano'] as const
 /** How fires are drawn: their real pixels, a heat map, or animated 3D flames. */
 export type Look = 'pixels' | 'heat' | 'fire3d'
 
-/** A low-poly flame: three jittered hexagonal rings and a tip (local y 0 → 1, radius ≤ 1). */
-function flameGeometry() {
-  const rings: [number, number][] = [[0, 1], [0.32, 0.82], [0.62, 0.48]]
-  const N = 6
-  const pts: THREE.Vector3[][] = rings.map(([y, r], k) =>
-    Array.from({ length: N }, (_, i) => {
-      const a = (i / N) * Math.PI * 2 + k * 0.5
-      const j = 1 + ((i * 7 + k * 3) % 5) * 0.06
-      return new THREE.Vector3(Math.cos(a) * r * j, y, Math.sin(a) * r * j)
-    }),
-  )
-  const tip = new THREE.Vector3(0.08, 1, -0.05)
-  const pos: number[] = []
-  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
-  for (let k = 0; k < rings.length - 1; k++)
-    for (let i = 0; i < N; i++) {
-      const a = pts[k][i], b = pts[k][(i + 1) % N], c = pts[k + 1][i], d = pts[k + 1][(i + 1) % N]
-      tri(a, c, b)
-      tri(b, c, d)
-    }
-  const top = pts[rings.length - 1]
-  for (let i = 0; i < N; i++) tri(top[i], tip, top[(i + 1) % N])
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  return g
-}
 
 /**
  * One gizmo per kind, drawn once (editor-style line icons): a thin coloured stroke over a dark
@@ -871,28 +845,63 @@ export class GlobeEngine {
     this.overlayScene.add(quad)
   }
 
-  /** 3D fire: visible records clustered on a grid that follows the zoom; bigger, hotter clusters burn taller and brighter. */
+  /**
+   * 3D fire: visible records merged by their distance on screen (about 26 px), so fires that look
+   * close become one flame; zooming out merges more, zooming in splits them. Each flame is a
+   * camera-facing, faceted (low-poly) animated flame, taller and brighter with its total power.
+   */
   private updateFlames(alt: number, now: number) {
-    const cellKm = Math.min(500, Math.max(3, (alt * R_KM) / 12))
-    const key = `${Math.round(Math.log(cellKm) * 6)}|${Math.floor(this.simT / 600)}|${this.filterVersion}`
+    const pr = this.renderer.getPixelRatio()
+    const pxPerRad = (this.fireU.uPx.value as number) / Math.max(alt, 1e-4)
+    const rKm = Math.max(0.6, ((26 * pr) / pxPerRad) * R_KM)
+    const key = `${Math.round(Math.log(rKm) * 5)}|${Math.floor(this.simT / 600)}|${this.filterVersion}`
     if (key === this.flameKey || now - this.flameAt < 250) return
     this.flameKey = key
     this.flameAt = now
     const C = this.D.cols
-    const deg = cellKm / 111.2
+    const deg = rKm / 111.2
     const W = Math.ceil(360 / deg)
-    const cells = new Map<number, { la: number; lo: number; n: number; frp: number }>()
+    type Cl = { la: number; lo: number; n: number; frp: number; i: number; j: number }
+    const cells = new Map<number, Cl>()
     for (let i = 0; i < this.count; i++) {
       if (!this.isVisible(i) || this.D.sats[C.sat[i]].system === 3) continue
-      const k = Math.floor((C.lat[i] + 90) / deg) * W + Math.floor((C.lon[i] + 180) / deg)
+      const ci = Math.floor((C.lat[i] + 90) / deg), cj = Math.floor((C.lon[i] + 180) / deg)
+      const k = ci * W + cj
       let c = cells.get(k)
-      if (!c) cells.set(k, (c = { la: 0, lo: 0, n: 0, frp: 0 }))
+      if (!c) cells.set(k, (c = { la: 0, lo: 0, n: 0, frp: 0, i: ci, j: cj }))
       c.la += C.lat[i]
       c.lo += C.lon[i]
       c.n++
       c.frp += C.frp[i] ?? 1
     }
-    const list = [...cells.values()].sort((a, b) => b.frp - a.frp).slice(0, 2500)
+    // Greedy merge, strongest first: each flame absorbs the cells whose centre lies within the merge
+    // radius of it (no chaining across a whole fire zone, no grid seams between neighbours).
+    const order = [...cells.entries()].sort((a, b) => b[1].frp - a[1].frp)
+    const taken = new Set<number>()
+    const lim = (rKm * 1.5) / 111.2
+    const groups: { la: number; lo: number; n: number; frp: number }[] = []
+    for (const [k, a] of order) {
+      if (taken.has(k)) continue
+      taken.add(k)
+      const g = { la: a.la, lo: a.lo, n: a.n, frp: a.frp }
+      const ala = a.la / a.n, alo = a.lo / a.n, kc = Math.cos((ala * Math.PI) / 180)
+      for (let di = -2; di <= 2; di++)
+        for (let dj = -2; dj <= 2; dj++) {
+          if (!di && !dj) continue
+          const nk = (a.i + di) * W + (a.j + dj)
+          const b = cells.get(nk)
+          if (!b || taken.has(nk)) continue
+          if (Math.hypot(ala - b.la / b.n, (alo - b.lo / b.n) * kc) <= lim) {
+            taken.add(nk)
+            g.la += b.la
+            g.lo += b.lo
+            g.n += b.n
+            g.frp += b.frp
+          }
+        }
+      groups.push(g)
+    }
+    const list = groups.sort((a, b) => b.frp - a.frp).slice(0, 3000)
     if (this.flames) {
       this.scene.remove(this.flames)
       this.flames.geometry.dispose()
@@ -900,61 +909,83 @@ export class GlobeEngine {
       this.flames = null
     }
     if (!list.length) return
-    const base = flameGeometry()
     const g = new THREE.InstancedBufferGeometry()
-    g.setAttribute('position', base.getAttribute('position'))
+    g.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0], 3))
+    g.setIndex([0, 1, 2, 0, 2, 3])
     g.instanceCount = list.length
-    const iP = new Float32Array(list.length * 3), iH = new Float32Array(list.length), iI = new Float32Array(list.length), iS = new Float32Array(list.length)
+    const iP = new Float32Array(list.length * 3), iI = new Float32Array(list.length), iS = new Float32Array(list.length)
     const v = new THREE.Vector3()
-    list.forEach((c, n) => {
+    // draw the smallest first so big flames stand in front
+    list.reverse().forEach((c, n) => {
       ll2v(c.la / c.n, c.lo / c.n, 1, v)
       iP.set([v.x, v.y, v.z], n * 3)
-      const f = Math.min(1, Math.log10(1 + c.frp) / 4) // 1 MW … 10 GW
-      iI[n] = f
-      iH[n] = (cellKm / R_KM) * (0.3 + 1.5 * f)
-      iS[n] = (n * 0.618) % 1
+      iI[n] = Math.min(1, Math.log10(1 + c.frp) / 3.6) // ~1 MW … 4 GW
+      iS[n] = ((c.la * 12.9898 + c.lo * 78.233) % 1 + 1) % 1
     })
     g.setAttribute('iP', new THREE.InstancedBufferAttribute(iP, 3))
-    g.setAttribute('iH', new THREE.InstancedBufferAttribute(iH, 1))
     g.setAttribute('iI', new THREE.InstancedBufferAttribute(iI, 1))
     g.setAttribute('iS', new THREE.InstancedBufferAttribute(iS, 1))
+    const u = this.fireU as Record<string, THREE.IUniform>
     const mesh = new THREE.Mesh(
       g,
       new THREE.ShaderMaterial({
-        uniforms: { uClock: this.flameClock },
+        uniforms: { uClock: this.flameClock, uView: u.uView, uPr: { value: pr }, uClose: this.flameClose },
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
         vertexShader: `
-          attribute vec3 iP; attribute float iH, iI, iS; uniform float uClock;
-          varying float vY; varying float vI; varying vec3 vPos;
+          attribute vec3 iP; attribute float iI, iS;
+          uniform vec2 uView; uniform float uPr, uClose;
+          varying vec2 vUv; varying float vI, vS;
           void main(){
-            vec3 up = normalize(iP);
-            vec3 ax = normalize(abs(up.y) < 0.99 ? cross(vec3(0., 1., 0.), up) : vec3(1., 0., 0.));
-            vec3 az = cross(up, ax);
-            float y = position.y, t = uClock * 2.6 + iS * 6.2832;
-            float sx = (sin(t + y * 3.2) * 0.22 + sin(t * 1.7 + iS * 13.) * 0.08) * y;
-            float sz = cos(t * 1.3 + y * 2.6) * 0.18 * y;
-            float h = iH * (1.0 + 0.14 * sin(t * 2.3 + iS * 7.));
-            float w = iH * 0.3;
-            vec3 world = iP * 1.0002 + ax * (position.x + sx) * w + az * (position.z + sz) * w + up * (y * h);
-            vec4 mv = modelViewMatrix * vec4(world, 1.);
-            vY = y; vI = iI; vPos = mv.xyz;
-            gl_Position = projectionMatrix * mv;
+            if (dot(iP, cameraPosition - iP) < 0.0) { gl_Position = vec4(2., 2., 2., 1.); return; }
+            vec4 c = projectionMatrix * modelViewMatrix * vec4(iP * 1.0002, 1.);
+            float h = (16.0 + 58.0 * iI * iI + 10.0 * iI) * uPr * uClose;
+            float w = h * (0.5 + 0.12 * iI);
+            c.xy += vec2(position.x * w, position.y * h - h * 0.08) * 2.0 / uView * c.w;
+            vUv = position.xy; vI = iI; vS = iS;
+            gl_Position = c;
           }`,
         fragmentShader: `
-          varying float vY; varying float vI; varying vec3 vPos;
+          uniform float uClock;
+          varying vec2 vUv; varying float vI, vS;
+          float h1(float n){ return fract(sin(n) * 43758.5453); }
+          float noise(vec2 p){
+            vec2 i = floor(p), f = fract(p);
+            float a = h1(i.x + i.y * 57.0), b = h1(i.x + 1.0 + i.y * 57.0), c = h1(i.x + (i.y + 1.0) * 57.0), d = h1(i.x + 1.0 + (i.y + 1.0) * 57.0);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+          }
           void main(){
-            vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));
-            float shade = 0.62 + 0.38 * abs(n.z);
-            vec3 base = mix(vec3(0.78, 0.10, 0.04), vec3(1.0, 0.48, 0.06), smoothstep(0.0, 0.5, vY));
-            vec3 col = mix(base, vec3(1.0, 0.9, 0.42), smoothstep(0.5, 1.0, vY) * (0.5 + 0.5 * vI));
-            gl_FragColor = vec4(col * shade * (0.75 + 0.55 * vI), 1.0);
+            float y = vUv.y;
+            float t = uClock * (2.2 + vS) + vS * 40.0;
+            // low-poly: the flame is cut into horizontal bands, each band one facet
+            float band = floor(y * 6.0) / 6.0;
+            float n = noise(vec2(vS * 9.0 + band * 3.0, band * 5.0 - t * 1.6));
+            float sway = (noise(vec2(t * 0.7, vS * 3.0)) - 0.5) * 0.35 * y;
+            float x = vUv.x - sway;
+            // teardrop: wide at the base, a tongue toward the tip
+            float width = 0.5 * pow(max(0.0, 1.0 - y), 0.75) * (0.62 + 0.5 * n) * smoothstep(0.0, 0.12, y + 0.05);
+            float ax = abs(x);
+            if (ax > width || y > 0.98) discard;
+            float core = 1.0 - ax / max(width, 1e-3);
+            float facet = floor(core * 3.0) / 3.0;
+            vec3 red = vec3(0.86, 0.13, 0.05), orange = vec3(1.0, 0.45, 0.06), yellow = vec3(1.0, 0.82, 0.26), white = vec3(1.0, 0.97, 0.8);
+            vec3 col = mix(red, orange, smoothstep(0.0, 0.34, facet));
+            col = mix(col, yellow, smoothstep(0.34, 0.67, facet) * (1.0 - y * 0.7));
+            col = mix(col, white, smoothstep(0.67, 1.0, facet) * (1.0 - y) * (0.4 + 0.6 * vI));
+            col *= 0.82 + 0.18 * noise(vec2(band * 9.0, t));
+            float edge = smoothstep(width, width - 0.04, ax);
+            gl_FragColor = vec4(col * (0.85 + 0.35 * vI), edge);
           }`,
       }),
     )
     mesh.frustumCulled = false
-    mesh.renderOrder = 3
+    mesh.renderOrder = 10
     this.scene.add(mesh)
     this.flames = mesh
   }
+  private flameClose = { value: 1 }
   private flameClock = { value: 0 }
 
   /** The known heat sources' icons (constant size on screen, hidden behind the Earth). */
@@ -1517,8 +1548,8 @@ export class GlobeEngine {
     this.controls.rotateSpeed = Math.min(0.5, Math.max(0.0006, alt0 * 0.19))
     this.controls.update()
     // 3D fire close up: tilt the view toward the horizon so the flames show their height.
-    if (this.look === 'fire3d' && alt0 < 0.35) {
-      const k = Math.min(1, (0.35 - alt0) / 0.25)
+    if (this.look === 'fire3d' && alt0 < 0.12) {
+      const k = Math.min(1, (0.12 - alt0) / 0.08)
       const up = this.camera.position.clone().normalize()
       const north = new THREE.Vector3(0, 1, 0).addScaledVector(up, -up.y)
       if (north.lengthSq() < 1e-6) north.set(1, 0, 0)
@@ -1570,7 +1601,10 @@ export class GlobeEngine {
     }
     this.flameClock.value = now / 1000
     this.fireMesh.visible = this.look === 'pixels'
-    if (this.look === 'fire3d') this.updateFlames(alt, now)
+    if (this.look === 'fire3d') {
+      this.flameClose.value = alt < 0.02 ? 1.7 : alt < 0.08 ? 1.35 : 1
+      this.updateFlames(alt, now)
+    }
     if (this.flames) this.flames.visible = this.look === 'fire3d'
     if (this.look === 'heat' && this.heatRT) {
       this.fireU.uSplat.value = (alt < 0.05 ? 34 : alt < 0.5 ? 28 : 22) * this.renderer.getPixelRatio()
