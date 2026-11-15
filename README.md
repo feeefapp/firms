@@ -5,7 +5,10 @@ detections into a single monthly calendar of *Aqua-equivalent fire-days*. You ca
 years without the jump that appears when one sensor hands over to the other. It was built for the NASA
 Space Apps 2026 challenge *Harmonization of MODIS and VIIRS Hot Spots*.
 
-Live: **https://firms.apps.feeef.dev** (Arabic and English).
+Live: **https://firms.apps.feeef.dev** (Arabic and English). New to the topic? Read the
+**[plain-language guide](https://firms.apps.feeef.dev/guide.html)** ([`web/public/guide.html`](web/public/guide.html)):
+cameras vs satellites, fire-days, the conversion, how it was tested, the 7% floor, results per
+region (Algeria included), the 2022 orbit drift and how to read the calendar, with interactive charts.
 
 ## What's inside
 
