@@ -21,8 +21,17 @@ export const regionNames = { punjab: 'Punjab, India', ssudan: 'South Sudan', por
 export type Region = keyof typeof regionNames
 export const studyRegions = Object.keys(regionNames) as Region[]
 
-export type PresentationState = { index: number; technical: boolean; startedAt: number; pausedAt: number | null }
-export type Message = { type: 'state'; state: PresentationState } | { type: 'request' } | { type: 'navigate'; index: number } | { type: 'technical'; value: boolean } | { type: 'timer'; action: 'pause' | 'reset' }
+export type PresentationState = {
+  index: number
+  technical: boolean
+  startedAt: number | null
+  pausedAt: number | null
+  slideStartedAt: number | null
+  slideBudgetMs: number
+  spentMs: number[]
+  finished: boolean
+}
+export type Message = { type: 'state'; state: PresentationState } | { type: 'request' } | { type: 'navigate'; index: number } | { type: 'technical'; value: boolean } | { type: 'timer'; action: 'start' | 'pause' | 'reset' }
 
 // Same-origin, ephemeral coordination. Never send speaker notes to the audience DOM.
 export function connectPresentation(room: string, receive: (message: Message) => void) {

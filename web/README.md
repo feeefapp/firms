@@ -31,8 +31,17 @@ five technical subslides. It runs outside the workspace shell, with locally host
 textures and an archived sample, so its core content does not need a sign-in or API access.
 
 - Left/right arrows or Page Up/Down move between slides. Space advances when a control is not focused.
-- `P` opens a separate presenter window with speaking notes, demo cues, sources, a timer and remote navigation.
+- **Start presentation** (or `P`) opens a separate presenter window and starts the three-minute
+  countdown at slide 1. Browsing slides beforehand does not start it. Reopening **Presenter**
+  during a run keeps the same clock.
   Share only the audience window. Notes never appear in the audience slide DOM.
+- The private view shows a white → blue → red time bar for the current slide, suggested slide
+  times, and the total time remaining. Method, results and demo slides get more time. Advancing
+  early, overrunning, jumping or toggling technical slides redistributes the remaining 180-second
+  budget. Slide changes stay manual until the thank-you page is shown automatically at 3:00.
+- Pause freezes both countdowns; resume continues the remaining speaking time. Restart returns
+  to slide 1 with 3:00. The clock survives audience refreshes in the same tab. Run the timing
+  regression checks with `npm run test:presentation` (Node 22.6+).
 - `F` toggles fullscreen, `O` opens the overview, and `T` includes/skips technical slides.
 - The demo uses the actual `GlobeEngine` and the guide's `drawCalendar` figure. Its globe is an explicitly
   labelled sample of 6,000 real detections from 1 November 2026, rather than a live feed.

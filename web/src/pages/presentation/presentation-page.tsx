@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Copy, Expand, Flame, Grid2x2, Monitor, Presentation, X } from 'lucide-react'
 import { connectPresentation, neighbour, slides, visibleIndexes, type Message, type PresentationState } from './content'
 import { Scene } from './scenes'
+import { finishPresentation, navigatePresentation, PRESENTATION_MS, restorePresentation, setTechnicalSlides, startPresentation, togglePause } from './pacing.ts'
 import './presentation.css'
 
 const Presenter = lazy(() => import('./presenter'))
@@ -12,9 +13,21 @@ export default function PresentationPage() {
 }
 
 function Audience() {
+  const [room] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get('session')
+    if (requested) return requested
+    try {
+      const existing = sessionStorage.getItem('firms-presentation-room')
+      if (existing) return existing
+      const created = crypto.randomUUID()
+      sessionStorage.setItem('firms-presentation-room', created)
+      return created
+    } catch { return crypto.randomUUID() }
+  })
   const [state, setState] = useState<PresentationState>(() => {
     const index = Math.max(0, slides.findIndex(s => s.id === window.location.hash.slice(1)))
-    return { index, technical: true, startedAt: Date.now(), pausedAt: null }
+    try { return restorePresentation(sessionStorage.getItem(`firms-pacing:${room}`), index) }
+    catch { return restorePresentation(null, index) }
   })
   const [overview, setOverview] = useState(false)
   const [help, setHelp] = useState(false)
@@ -24,35 +37,30 @@ function Audience() {
   const root = useRef<HTMLDivElement>(null)
   const live = useRef(state)
   live.current = state
-  const [room] = useState(() => {
-    const requested = new URLSearchParams(window.location.search).get('session')
-    if (requested) return requested
-    // Keep a presenter connected when the audience refreshes the same tab.
-    try {
-      const existing = sessionStorage.getItem('firms-presentation-room')
-      if (existing) return existing
-      const created = crypto.randomUUID()
-      sessionStorage.setItem('firms-presentation-room', created)
-      return created
-    } catch { return crypto.randomUUID() }
-  })
   const channel = useRef<ReturnType<typeof connectPresentation> | null>(null)
   const popup = useRef<Window | null>(null)
 
-  const go = useCallback((index: number) => { setState(s => ({ ...s, index: Math.max(0, Math.min(slides.length - 1, index)) })); setOverview(false) }, [])
+  const go = useCallback((index: number) => { setState(s => navigatePresentation(s, index, Date.now())); setOverview(false) }, [])
   const step = useCallback((direction: number) => { const s = live.current; go(neighbour(s.index, direction, s.technical)) }, [go])
-  const technical = useCallback((value: boolean) => setState(s => ({ ...s, technical: value, index: !value && 'technical' in slides[s.index] ? neighbour(s.index, -1, false) : s.index })), [])
+  const technical = useCallback((value: boolean) => setState(s => setTechnicalSlides(s, value, Date.now())), [])
   const full = useCallback(async () => {
     try { if (document.fullscreenElement) await document.exitFullscreen(); else await root.current?.requestFullscreen() }
     catch { setNotice('Fullscreen is unavailable here. Open this page in your browser to present fullscreen.') }
   }, [])
   const openPresenter = useCallback(() => {
+    const clickedAt = Date.now()
     const url = new URL(window.location.href)
     url.search = new URLSearchParams({ presenter: '1', session: room }).toString()
     url.hash = ''
     popup.current = window.open(url, `firms-presenter-${room}`, 'popup,width=1150,height=850')
-    if (!popup.current) setNotice('Your browser blocked the presenter window. Allow pop-ups for this page, then choose Presenter again.')
-    else { popup.current.focus(); setNotice('Presenter notes opened in a separate window. Share this audience window during your presentation.') }
+    if (!popup.current) setNotice(`Your browser blocked the presenter window. Allow pop-ups for this page, then try again.${live.current.startedAt === null ? ' The timer has not started.' : ''}`)
+    else {
+      setState(s => s.startedAt === null || s.finished ? startPresentation(s, clickedAt) : s)
+      setOverview(false)
+      setHelp(false)
+      popup.current.focus()
+      setNotice('Private notes and timing are open. Keep that window on your display and share this audience window.')
+    }
   }, [room])
 
   useEffect(() => {
@@ -60,7 +68,7 @@ function Audience() {
       if (message.type === 'request') channel.current?.send({ type: 'state', state: live.current })
       if (message.type === 'navigate') go(message.index)
       if (message.type === 'technical') technical(message.value)
-      if (message.type === 'timer') setState(s => message.action === 'reset' ? { ...s, startedAt: Date.now(), pausedAt: null } : s.pausedAt ? { ...s, startedAt: s.startedAt + Date.now() - s.pausedAt, pausedAt: null } : { ...s, pausedAt: Date.now() })
+      if (message.type === 'timer') setState(s => message.action === 'pause' ? togglePause(s, Date.now()) : startPresentation(s, Date.now()))
     }
     channel.current = connectPresentation(room, receive)
     return () => channel.current?.close()
@@ -68,11 +76,20 @@ function Audience() {
 
   useEffect(() => {
     channel.current?.send({ type: 'state', state })
+    try { sessionStorage.setItem(`firms-pacing:${room}`, JSON.stringify(state)) } catch { /* Live timing still works without storage. */ }
     const url = new URL(window.location.href)
     url.hash = slides[state.index].id
     window.history.replaceState(window.history.state, '', url)
     document.title = `${slides[state.index].title} · Firms presentation`
-  }, [state])
+  }, [state, room])
+  useEffect(() => {
+    if (state.startedAt === null || state.pausedAt !== null || state.finished) return
+    const finish = () => setState(s => finishPresentation(s, Date.now()))
+    const timeout = setTimeout(finish, Math.max(0, state.startedAt + PRESENTATION_MS - Date.now()))
+    document.addEventListener('visibilitychange', finish)
+    window.addEventListener('focus', finish)
+    return () => { clearTimeout(timeout); document.removeEventListener('visibilitychange', finish); window.removeEventListener('focus', finish) }
+  }, [state.startedAt, state.pausedAt, state.finished])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey || (event.target instanceof Element && event.target.closest('input, select, textarea, [contenteditable]'))) return
@@ -101,7 +118,7 @@ function Audience() {
   const visible = visibleIndexes(state.technical)
   const slide = slides[state.index]
   return <div ref={root} className={`mission ${fullscreen ? 'is-fullscreen' : ''}`} lang="en" dir="ltr">
-    <header className="mission-header"><a className="mission-brand" href="/" aria-label="Back to Firms"><Flame size={22} /><b>Firms</b></a><span className="mission-event">NASA Space Apps 2026</span><span className="mission-section">{slide.section}</span><div className="mission-header-tools"><button onClick={openPresenter} title="Presenter notes (P)"><Presentation size={17} /><span>Presenter</span></button><button onClick={() => void full()} title="Fullscreen (F)" aria-label="Toggle fullscreen"><Expand size={18} /></button></div></header>
+    <header className="mission-header"><a className="mission-brand" href="/" aria-label="Back to Firms"><Flame size={22} /><b>Firms</b></a><span className="mission-event">NASA Space Apps 2026</span><span className="mission-section">{slide.section}</span><div className="mission-header-tools"><button onClick={openPresenter} title="Start presentation / open presenter notes (P)"><Presentation size={17} /><span>{state.startedAt === null ? 'Start presentation' : state.finished ? 'Present again' : 'Presenter'}</span></button><button onClick={() => void full()} title="Fullscreen (F)" aria-label="Toggle fullscreen"><Expand size={18} /></button></div></header>
     <main className="mission-stage" aria-label={`Slide ${slide.id}: ${slide.title}`}><div key={slide.id} className="mission-scene"><Scene index={state.index} /></div></main>
     <footer className="mission-footer"><div className="mission-footer-left"><button onClick={() => setOverview(v => !v)} aria-label="Slide overview" aria-expanded={overview} title="Slide overview (O)"><Grid2x2 size={18} /></button><label className="mission-technical-toggle"><input type="checkbox" checked={state.technical} onChange={e => technical(e.target.checked)} /><span>Technical slides</span></label></div><div className="mission-progress" aria-label="Slide progress">{visible.map(i => <button key={i} title={`${slides[i].id}: ${slides[i].title}`} aria-label={`Go to slide ${slides[i].id}`} aria-current={i === state.index ? 'step' : undefined} className={'technical' in slides[i] ? 'is-technical' : ''} onClick={() => go(i)} />)}</div><div className="mission-navigation"><span>{String(visible.indexOf(state.index) + 1).padStart(2, '0')}<i>/</i>{visible.length}</span><button aria-label="Previous slide" onClick={() => step(-1)} disabled={state.index === 0}><ArrowLeft size={20} /></button><button aria-label="Next slide" onClick={() => step(1)} disabled={state.index === 14}><ArrowRight size={20} /></button></div></footer>
     <div className="mission-shortcuts"><button onClick={() => setHelp(v => !v)}>Keyboard shortcuts</button><button onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 1600) } catch { setNotice('Copy this page’s address from your browser to share the current slide.') } }}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy slide link'}</button></div>
