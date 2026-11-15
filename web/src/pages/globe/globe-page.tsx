@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { BoxSelect, Clock, Download, Earth, Flag, Flame, MapPinned, Pause, Play, Search, Sparkles, Trash2, X, ZoomIn } from 'lucide-react'
 import { Button, IconButton } from '@feeef.dev/ui/primitives/button'
@@ -555,7 +556,11 @@ export default function GlobePage() {
             className="fm-globe-card-sheet"
             header={
               <div className="fm-sheet-head" data-lab-sheet-handle="">
-                {ready && e ? <Scrubber engine={e} simT={simT} isRange={isRange} onSeek={seek} span={span} at={at} /> : null}
+                {ready && e && stage ? (
+                  <PinnedAboveSheet stage={stage} wide={wide}>
+                    <Scrubber engine={e} simT={simT} isRange={isRange} onSeek={seek} span={span} at={at} />
+                  </PinnedAboveSheet>
+                ) : null}
                 <div className="fm-sheet-actions">
                   <ToolbarGroup label={t('m.globe.timeline')}>
                     <IconButton
@@ -737,6 +742,32 @@ export default function GlobePage() {
         </>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Floats its children just above the sheet's top edge, following the sheet as it rises and
+ * settles (the kit's live height), transparent and borderless; hidden when the sheet is full.
+ */
+function PinnedAboveSheet({ stage, wide, children }: { stage: HTMLElement; wide: boolean; children: React.ReactNode }) {
+  const sheet = useSheet()
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (!sheet) return
+    const put = (h: number) => {
+      const el = ref.current
+      if (!el) return
+      el.style.bottom = `${h}px`
+      el.style.visibility = h > stage.clientHeight - 90 ? 'hidden' : ''
+    }
+    put(sheet.height.get())
+    return sheet.height.subscribe(put)
+  }, [sheet, stage])
+  return createPortal(
+    <section ref={ref} className="fm-scrub-pin" data-wide={wide || undefined} aria-label={t('m.globe.timeline')}>
+      {children}
+    </section>,
+    stage,
   )
 }
 
