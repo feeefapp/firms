@@ -6,13 +6,31 @@
   "demo": "firms-seven-slide-demo.pdf",
   "demo_slide_count": 7,
   "ai_assisted": true,
-  "ai_tools": ["Claude", "OpenAI Codex"],
-  "ai_assistance_scope": ["code", "debugging", "research", "analysis interpretation", "explanatory text", "visual layout", "presentation preparation"],
+  "ai_tools": [
+    "Claude",
+    "OpenAI Codex"
+  ],
+  "ai_assistance_scope": [
+    "code",
+    "debugging",
+    "research",
+    "analysis interpretation",
+    "explanatory text",
+    "visual layout",
+    "presentation preparation"
+  ],
   "scientific_observations_generated_by_ai": false,
   "scientific_observation_source": "NASA FIRMS MODIS and VIIRS",
   "earth_textures_generated_by_ai": false,
   "credits": "AI-and-resource-disclosure.md",
-  "license_review": {
-    "feeef_ui_0_14_5": "Installed package marked UNLICENSED; rights-holder clarification required before submission attestation."
+  "dependency_licenses": {
+    "feeef_ui_0_14_5": {
+      "license": "MIT",
+      "confirmed_by_rights_holder": true,
+      "confirmation_date": "2026-11-15",
+      "notice": "feeef-ui-LICENSE.txt",
+      "public_runtime_distribution": "../../web/prebuilt/assets/",
+      "upstream_manifest_metadata": "UNLICENSED (outdated)"
+    }
   }
 }
