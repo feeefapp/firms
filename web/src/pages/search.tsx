@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, Earth, SearchX } from 'lucide-react'
 import { FilterBar, type FilterOption, type FilterValue } from '@feeef.dev/ui/filter-bar'
+import { TemporalFilterEditor } from '@feeef.dev/ui/filters/temporal-editor'
 import { Button, IconButton } from '@feeef.dev/ui/primitives/button'
 import { NumberField } from '@feeef.dev/ui/primitives/number-field'
 import { TextField } from '@feeef.dev/ui/primitives/text-field'
@@ -93,7 +94,20 @@ export default function SearchPage() {
     () => [
       { id: 'area', label: t('m.search.region'), description: t('m.search.regionHint'), type: 'enum', choices: regions.map((r) => ({ value: r.name, label: regionTitle(r) })) },
       { id: 'bbox', label: t('m.search.bbox'), description: t('m.search.bboxHint'), type: 'custom', renderEditor: (v, on) => <BboxEditor value={v} onChange={on} />, formatValue: (v) => (typeof v === 'string' ? v : '') , validate: (v) => (typeof v === 'string' && v && !parseBbox(v) ? t('m.search.bboxError') : null) },
-      { id: 'date', label: t('m.search.date'), description: t('m.search.dateHint'), type: 'date', max: new Date().toISOString().slice(0, 10), min: '2000-11-01' },
+      {
+        id: 'date',
+        label: t('m.search.date'),
+        description: t('m.search.dateHint'),
+        type: 'custom',
+        renderEditor: (v, on) => (
+          <TemporalFilterEditor
+            config={{ type: 'date', max: new Date().toISOString().slice(0, 10), min: '2000-11-01' }}
+            value={typeof v === 'string' ? v : null}
+            onChange={(x) => on(typeof x === 'string' && x ? x : null)}
+          />
+        ),
+        formatValue: (v) => (typeof v === 'string' ? formatDate(v) : ''),
+      },
       { id: 'days', label: t('m.search.days'), description: t('m.search.daysHint'), type: 'enum', choices: [1, 2, 3, 4, 5].map((d) => ({ value: String(d), label: t('m.search.daysValue', { count: d }) })) },
       // Sources are on/off filters: the ones on are queried, none on means the default set.
       ...SOURCES.map((src) => ({ id: `src:${src}`, label: t(`m.source.${src}`), description: `${src} · ${t('m.search.sourcesHint')}`, keywords: [t('m.search.sources'), src] })),

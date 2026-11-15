@@ -11,6 +11,7 @@ import { ToolbarGroup } from '@feeef.dev/ui/toolbar'
 import { Sheet, useSheet } from '@feeef.dev/ui/containers/sheet'
 import { PresentationDock } from '@feeef.dev/ui/presentation/dock'
 import { FilterBar, type FilterOption, type FilterValue } from '@feeef.dev/ui/filter-bar'
+import { TemporalFilterEditor } from '@feeef.dev/ui/filters/temporal-editor'
 import { useSession } from '@/app/session'
 import { ErrorState, LoadingState, Notice } from '@/components/ui/data'
 import { regionTitle } from '@/lib/algorithms'
@@ -309,7 +310,22 @@ export default function GlobePage() {
         .map((x) => ({ id: `sat:${x.code}`, label: `${x.symbol} ${x.name}`, description: `${x.instrument} · ${t('m.globe.satellitesHint')}`, keywords: [t('m.globe.satellites'), x.code] })),
     ]
     return [
-      { id: 'day', label: t('m.globe.oneDay'), description: t('m.globe.dayFoot'), type: 'date', min: daysAgo(60), max: yesterday() },
+      {
+        // A custom option opens the kit's filter dialog, which fits a whole month (the small
+        // value popover cuts the calendar off after its second week).
+        id: 'day',
+        label: t('m.globe.oneDay'),
+        description: t('m.globe.dayFoot'),
+        type: 'custom',
+        renderEditor: (v, on) => (
+          <TemporalFilterEditor
+            config={{ type: 'date', min: daysAgo(60), max: yesterday() }}
+            value={typeof v === 'string' ? v : null}
+            onChange={(x) => on(typeof x === 'string' && x ? x : null)}
+          />
+        ),
+        formatValue: (v) => (typeof v === 'string' ? formatDate(v) : ''),
+      },
       { id: 'range', label: t('m.globe.range'), description: t('m.globe.pickRangeHint'), type: 'dateRange', min: '2000-11-01', max: today() },
       { id: 'country', label: t('m.globe.country'), description: t('m.globe.searchAbove'), type: 'enum', choices: (countries ?? []).map((c) => ({ value: c.code, label: c.name })) },
       { id: 'conf', label: t('m.globe.confidence'), type: 'enum', choices: [{ value: '1', label: t('m.conf.nominal') }, { value: '2', label: t('m.conf.high') }] },
