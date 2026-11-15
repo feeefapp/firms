@@ -21,17 +21,23 @@ const AssistantPage = lazy(() => import('@/pages/assistant'))
 const RegionsPage = lazy(() => import('@/pages/regions'))
 const DevelopersPage = lazy(() => import('@/pages/developers'))
 const GuidePage = lazy(() => import('@/pages/guide/guide-page'))
+const PresentationPage = lazy(() => import('@/pages/presentation/presentation-page'))
 
 /** Firms' look: the kit's defaults with a blue primary (selection, focus, the main action). */
 const THEME: ThemeConfig = { primary: '#2a78d6' }
 
 export function App() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   // The kit's language switcher opens `?hl=<code>`; the app stores the choice and reloads.
   const go = (to: string) => {
     const hl = new URL(to, window.location.origin).searchParams.get('hl')
     if (hl && hl !== locale) changeLocale(hl)
     else navigate(to)
+  }
+  // A presentation is its own stage, outside the workspace chrome and account providers.
+  if (pathname === '/presentation' || pathname.startsWith('/presentation/')) {
+    return <Suspense fallback={<div style={{ minHeight: '100dvh', background: '#070d13' }} />}><PresentationPage /></Suspense>
   }
   return (
     <Provider theme={THEME} i18n={{ locale, dir, availableLocales: [...LOCALES], translations: messages, navigate: go }} services={{ navigate: go }}>

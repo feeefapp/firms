@@ -24,7 +24,27 @@ streamed turns in the AI SDK UI message stream v1 with reasoning, parallel tool 
 a view apply and an approval (`build …`), resumable runs (a prompt containing "drop" cuts the
 first connection) and connected MCP apps. `FIRMS_MOCK_AI=0` serves `ai_available:false`.
 
-## Shape
+## Interactive presentation
+
+Open `/presentation` (also in the sidebar) for the Space Apps presentation: ten main slides and
+five technical subslides. It runs outside the workspace shell, with locally hosted fonts, Earth
+textures and an archived sample, so its core content does not need a sign-in or API access.
+
+- Left/right arrows or Page Up/Down move between slides. Space advances when a control is not focused.
+- `P` opens a separate presenter window with speaking notes, demo cues, sources, a timer and remote navigation.
+  Share only the audience window. Notes never appear in the audience slide DOM.
+- `F` toggles fullscreen, `O` opens the overview, and `T` includes/skips technical slides.
+- The demo uses the actual `GlobeEngine` and the guide's `drawCalendar` figure. Its globe is an explicitly
+  labelled sample of 6,000 real detections from 1 November 2026, rather than a live feed.
+- `src/pages/presentation/study.json` is a checked-in snapshot of the four current regional files.
+  The headline is the mean regional forward-test WAPE. `notes.ts` loads only in the presenter chunk.
+- The presenter synchronizes through a per-presentation BroadcastChannel, with a storage-event fallback.
+  Pop-ups must be allowed. A separate window or display keeps the notes out of the shared audience view.
+
+The source bundle and `public/presentation/` assets ship through the existing Vite/Rust/Docker path.
+Refresh `prebuilt/` after building when preparing a Docker release without the private UI-kit build secret.
+
+## Front-end structure
 
 - `src/app/`: `app.tsx` (Provider → routes, lazy pages), `session.tsx` (`/api/me`, regions,
   algorithms), `assistant.tsx` (the agent state for the app: catalog and model choice per

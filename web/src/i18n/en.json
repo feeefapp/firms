@@ -1,4 +1,5 @@
 {
+  "m.nav.presentation": "Presentation",
   "m.account.account": "Account",
   "m.account.openMenu": "Account menu ({name})",
   "m.account.signOut": "Sign out",

@@ -295,7 +295,7 @@ export class GlobeEngine {
   private tiles: TileLayer
   private satOn: boolean[]
 
-  constructor(container: HTMLElement, data: DayData, cb: Callbacks) {
+  constructor(container: HTMLElement, data: DayData, cb: Callbacks, options: { textureBaseUrl?: string } = {}) {
     this.D = data
     this.cb = cb
     this.view = container
@@ -494,7 +494,7 @@ export class GlobeEngine {
     const loader = new THREE.TextureLoader()
     Promise.all(
       ['earth-blue-marble.jpg', 'earth-night.jpg'].map(
-        (f) => new Promise<THREE.Texture>((res, rej) => loader.load(`https://unpkg.com/three-globe@2.31.0/example/img/${f}`, res, undefined, rej)),
+        (f) => new Promise<THREE.Texture>((res, rej) => loader.load(`${options.textureBaseUrl ?? 'https://unpkg.com/three-globe@2.31.0/example/img'}/${f}`, res, undefined, rej)),
       ),
     )
       .then(([d, n]) => {
@@ -773,6 +773,11 @@ export class GlobeEngine {
   setPlaying(playing: boolean) {
     if (playing && this.simT >= this.span) this.simT = -600
     this.playing = playing
+  }
+  /** Gentle presentation backdrop rotation; ordinary globe views keep manual control. */
+  setAutoRotate(enabled: boolean, speed = 0.3) {
+    this.controls.autoRotate = enabled
+    this.controls.autoRotateSpeed = speed
   }
   setSpeed(speed: number) {
     this.speed = speed
