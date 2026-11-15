@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, Earth, SearchX } from 'lucide-react'
 import { FilterBar, type FilterOption, type FilterValue } from '@feeef.dev/ui/filter-bar'
 import { Button, IconButton } from '@feeef.dev/ui/primitives/button'
-import { Checkbox } from '@feeef.dev/ui/primitives/choice'
 import { NumberField } from '@feeef.dev/ui/primitives/number-field'
 import { TextField } from '@feeef.dev/ui/primitives/text-field'
 import { useSession } from '@/app/session'
@@ -43,27 +42,6 @@ function BboxEditor({ value, onChange }: { value: FilterValue; onChange: (v: Fil
   )
 }
 
-function SourcesEditor({ value, onChange }: { value: FilterValue; onChange: (v: FilterValue) => void }) {
-  const chosen = typeof value === 'string' && value ? value.split(',') : []
-  return (
-    <fieldset className="fm-chips fm-sources">
-      <legend className="fm-note">{t('m.search.sourcesHint')}</legend>
-      {SOURCES.map((s) => (
-        <Checkbox
-          key={s}
-          label={t(`m.source.${s}`)}
-          description={<span dir="ltr">{s}</span>}
-          checked={chosen.includes(s)}
-          onCheckedChange={(on) => {
-            const next = on ? [...chosen, s] : chosen.filter((x) => x !== s)
-            onChange(next.length ? SOURCES.filter((x) => next.includes(x)).join(',') : null)
-          }}
-        />
-      ))}
-    </fieldset>
-  )
-}
-
 function FrpEditor({ value, onChange }: { value: FilterValue; onChange: (v: FilterValue) => void }) {
   return (
     <NumberField
@@ -86,7 +64,7 @@ function FrpEditor({ value, onChange }: { value: FilterValue; onChange: (v: Filt
 export default function SearchPage() {
   const { regions } = useSession()
   const { params, update, search } = useAnalysisParams()
-  const [pinned, setPinned] = useState<string[]>(['area', 'bbox', 'date', 'days', 'sources', 'conf', 'frp'])
+  const [pinned, setPinned] = useState<string[]>(['area', 'bbox', 'date', 'days', 'conf', 'frp'])
   const [page, setPage] = useState(0)
 
   const bboxText = search.get('bbox')
@@ -117,7 +95,8 @@ export default function SearchPage() {
       { id: 'bbox', label: t('m.search.bbox'), description: t('m.search.bboxHint'), type: 'custom', renderEditor: (v, on) => <BboxEditor value={v} onChange={on} />, formatValue: (v) => (typeof v === 'string' ? v : '') , validate: (v) => (typeof v === 'string' && v && !parseBbox(v) ? t('m.search.bboxError') : null) },
       { id: 'date', label: t('m.search.date'), description: t('m.search.dateHint'), type: 'date', max: new Date().toISOString().slice(0, 10), min: '2000-11-01' },
       { id: 'days', label: t('m.search.days'), description: t('m.search.daysHint'), type: 'enum', choices: [1, 2, 3, 4, 5].map((d) => ({ value: String(d), label: t('m.search.daysValue', { count: d }) })) },
-      { id: 'sources', label: t('m.search.sources'), description: t('m.search.sourcesHint'), type: 'custom', renderEditor: (v, on) => <SourcesEditor value={v} onChange={on} />, formatValue: (v) => (typeof v === 'string' ? t('m.search.sourcesCount', { count: v.split(',').length }) : '') },
+      // Sources are on/off filters: the ones on are queried, none on means the default set.
+      ...SOURCES.map((src) => ({ id: `src:${src}`, label: t(`m.source.${src}`), description: `${src} · ${t('m.search.sourcesHint')}`, keywords: [t('m.search.sources'), src] })),
       { id: 'conf', label: t('m.search.conf'), description: t('m.search.confHint'), type: 'enum', choices: [
         { value: '0', label: t('m.conf.all') },
         { value: '1', label: t('m.conf.nominal') },
@@ -132,7 +111,6 @@ export default function SearchPage() {
     bbox: bboxText,
     date,
     days: String(days),
-    sources: sources || null,
     conf: conf ? String(conf) : null,
     frp: frp ? String(frp) : null,
   }
@@ -141,7 +119,6 @@ export default function SearchPage() {
     const patch: Record<string, string | null> = {
       date: str(next.date) === yesterday() ? null : str(next.date),
       days: str(next.days) === '1' ? null : str(next.days),
-      sources: str(next.sources),
       conf: str(next.conf) === '0' ? null : str(next.conf),
       frp: str(next.frp),
     }
@@ -169,8 +146,11 @@ export default function SearchPage() {
         <FilterBar
           label={t('m.search.filters')}
           options={options}
-          value={[]}
-          onChange={() => {}}
+          value={sources ? sources.split(',').map((x) => `src:${x}`) : []}
+          onChange={(ids) => {
+            const list = SOURCES.filter((x) => ids.includes(`src:${x}`))
+            update({ sources: list.length ? list.join(',') : null })
+          }}
           values={values}
           onValuesChange={onValues}
           pinned={pinned}

@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Download, Info } from 'lucide-react'
 import { Button } from '@feeef.dev/ui/primitives/button'
-import { Checkbox } from '@feeef.dev/ui/primitives/choice'
 import { useSession } from '@/app/session'
 import { LineChart } from '@/components/charts/line-chart'
 import { ErrorState, LoadingState, Notice, PageHeader, Panel, PanelHeader, Table, Tag, Td, Th } from '@/components/ui/data'
@@ -14,7 +13,8 @@ import { errorMessage } from '@/lib/errors'
 import { formatNumber } from '@/lib/format'
 import { DEFAULT_ALGORITHM, useAnalysisParams } from '@/lib/params'
 import { useRemote } from '@/lib/use-remote'
-import { EditPeriodButton, ParamsBar, rangeLabel } from '@/shell/params-bar'
+import type { FilterOption } from '@feeef.dev/ui/filter-bar'
+import { ParamsBar, rangeLabel } from '@/shell/params-bar'
 import { ScreenDock } from '@/shell/screen-slots'
 import { t } from '@/i18n/locale'
 
@@ -39,15 +39,20 @@ export default function ComparePage() {
     api.compare({ region: params.regionName, from: params.from, to: params.to, algorithms: ALGORITHM_KEYS.join(',') }, signal),
   )
   const benchmark = useRemote('benchmark', () => api.benchmark())
-  const toggle = (k: string, on: boolean) => {
-    const next = on ? [...new Set([...selected, k])] : selected.filter((x) => x !== k)
-    update({ algs: next.length && next.join(',') !== DEFAULT_SET.join(',') ? ALGORITHM_KEYS.filter((a) => next.includes(a)).join(',') : null })
+  // The methods drawn are on/off filters of the bar: `m:<algorithm>`.
+  const methodOptions = useMemo<FilterOption[]>(
+    () => list.map((a) => ({ id: `m:${a.key}`, label: a.name, description: t('m.compare.pick'), keywords: [t('m.compare.methods')] })),
+    [list],
+  )
+  const setMethods = (ids: string[]) => {
+    const next = ALGORITHM_KEYS.filter((a) => ids.includes(`m:${a}`))
+    update({ algs: next.length && next.join(',') !== DEFAULT_SET.join(',') ? next.join(',') : null })
   }
 
   return (
     <>
-      <ParamsBar showView={false} />
-      <PageHeader title={t('m.compare.title')} description={<><bdi>{regionTitle(params.region)}</bdi> · {rangeLabel(params.from, params.to)}</>} action={<EditPeriodButton />} />
+      <ParamsBar showView={false} onOff={{ options: methodOptions, value: selected.map((k) => `m:${k}`), onChange: setMethods }} />
+      <PageHeader title={t('m.compare.title')} description={<><bdi>{regionTitle(params.region)}</bdi> · {rangeLabel(params.from, params.to)}</>} />
       {compare.error && !compare.data ? (
         <Panel>
           <ErrorState title={t('m.compare.loadFailed')} message={errorMessage(compare.error)} onRetry={compare.reload} />
@@ -61,12 +66,6 @@ export default function ComparePage() {
           <Panel aria-busy={compare.loading || undefined}>
             <PanelHeader title={t('m.compare.annual')} description={t('m.compare.annualHint')} />
             <div className="fm-pad fm-stack">
-              <fieldset className="fm-chips">
-                <legend className="fm-note">{t('m.compare.pick')}</legend>
-                {list.map((a) => (
-                  <Checkbox key={a.key} controlSize="small" label={<span className="fm-chip-label"><i style={{ background: algColor(a.key) }} aria-hidden />{a.name}</span>} checked={selected.includes(a.key)} onCheckedChange={(on) => toggle(a.key, on)} />
-                ))}
-              </fieldset>
               <AnnualChart data={compare.data} selected={selected} current={params.algorithm} />
             </div>
           </Panel>

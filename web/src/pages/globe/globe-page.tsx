@@ -4,7 +4,6 @@ import { BoxSelect, Clock, Download, Earth, Flag, Flame, MapPinned, Pause, Play,
 import { Button, IconButton } from '@feeef.dev/ui/primitives/button'
 import { SegmentedControl } from '@feeef.dev/ui/primitives/segmented'
 import { Slider } from '@feeef.dev/ui/primitives/slider'
-import { Checkbox } from '@feeef.dev/ui/primitives/choice'
 import { NumberField } from '@feeef.dev/ui/primitives/number-field'
 import { ListRow, ListSection } from '@feeef.dev/ui/primitives/list'
 import { TextField } from '@feeef.dev/ui/primitives/text-field'
@@ -90,32 +89,6 @@ function findCountry(list: CountryShape[], q: string | null) {
 }
 
 const yesterday = () => daysAgo(1)
-
-/** Checkbox list editor for a multi-choice filter (satellites, sensors); the value is "a,b". */
-function MultiEditor({ value, onChange, choices, legend }: { value: FilterValue; onChange: (v: FilterValue) => void; choices: { value: string; label: React.ReactNode; color?: string }[]; legend: string }) {
-  const chosen = typeof value === 'string' && value ? value.split(',') : []
-  return (
-    <fieldset className="fm-chips fm-sources">
-      <legend className="fm-note">{legend}</legend>
-      {choices.map((c) => (
-        <Checkbox
-          key={c.value}
-          label={
-            <span className="fm-chip-label">
-              {c.color ? <i className="fm-swatch" style={{ background: c.color }} aria-hidden /> : null}
-              {c.label}
-            </span>
-          }
-          checked={chosen.includes(c.value)}
-          onCheckedChange={(on) => {
-            const next = on ? [...chosen, c.value] : chosen.filter((x) => x !== c.value)
-            onChange(next.length ? choices.map((x) => x.value).filter((x) => next.includes(x)).join(',') : null)
-          }}
-        />
-      ))}
-    </fieldset>
-  )
-}
 
 /**
  * The fire globe. The app bar holds every filter (FilterBar: period, country, sensors, satellites,
@@ -311,28 +284,25 @@ export default function GlobePage() {
   }, [data, country, stats, sats, picked, spots])
 
   // ---------- filter bar ----------
-  const [pinned, setPinned] = useState<string[]>(['day', 'range', 'country', 'sensors', 'frp'])
+  const [pinned, setPinned] = useState<string[]>(['day', 'range', 'country', 'frp', 'sensor:viirs', 'sensor:modis'])
   const shownDay = data && !data.range ? data.window[0] : (g.date ?? null)
   const options = useMemo<FilterOption[]>(() => {
-    const satChoices = sats.filter((_, i) => present[i]).map((s) => ({ value: s.code, label: <span dir="ltr">{`${s.symbol} ${s.name}`}</span>, color: SYSTEM_COLORS[s.system] }))
+    // Sensors and satellites are on/off filters: any that are on are shown, none on shows all.
+    const onOff: FilterOption[] = [
+      ...SENSORS.filter((_, k) => sats.some((x, i) => present[i] && x.system === k)).map((sensor) => ({
+        id: `sensor:${sensor}`,
+        label: t(`m.globe.sensor.${sensor}`),
+        description: t('m.globe.sensorsHint'),
+        keywords: [t('m.globe.sensors')],
+      })),
+      ...sats
+        .filter((_, i) => present[i])
+        .map((x) => ({ id: `sat:${x.code}`, label: `${x.symbol} ${x.name}`, description: `${x.instrument} · ${t('m.globe.satellitesHint')}`, keywords: [t('m.globe.satellites'), x.code] })),
+    ]
     return [
       { id: 'day', label: t('m.globe.oneDay'), description: t('m.globe.dayFoot'), type: 'date', min: daysAgo(60), max: yesterday() },
       { id: 'range', label: t('m.globe.range'), description: t('m.globe.pickRangeHint'), type: 'dateRange', min: '2000-11-01', max: today() },
       { id: 'country', label: t('m.globe.country'), description: t('m.globe.searchAbove'), type: 'enum', choices: (countries ?? []).map((c) => ({ value: c.code, label: c.name })) },
-      {
-        id: 'sensors',
-        label: t('m.globe.sensors'),
-        type: 'custom',
-        renderEditor: (v, on) => <MultiEditor value={v} onChange={on} legend={t('m.globe.sensorsHint')} choices={SENSORS.map((s, k) => ({ value: s, label: t(`m.globe.sensor.${s}`), color: SYSTEM_COLORS[k] }))} />,
-        formatValue: (v) => (typeof v === 'string' ? v.split(',').map((s) => t(`m.globe.sensor.${s}`)).join(', ') : ''),
-      },
-      {
-        id: 'sats',
-        label: t('m.globe.satellites'),
-        type: 'custom',
-        renderEditor: (v, on) => <MultiEditor value={v} onChange={on} legend={t('m.globe.satellitesHint')} choices={satChoices} />,
-        formatValue: (v) => (typeof v === 'string' ? v.split(',').map((c) => sats.find((s) => s.code === c)?.name ?? c).join(', ') : ''),
-      },
       { id: 'conf', label: t('m.globe.confidence'), type: 'enum', choices: [{ value: '1', label: t('m.conf.nominal') }, { value: '2', label: t('m.conf.high') }] },
       {
         id: 'frp',
@@ -345,14 +315,13 @@ export default function GlobePage() {
         formatValue: (v) => (typeof v === 'string' ? `≥ ${v} MW` : ''),
       },
       { id: 'dn', label: t('m.globe.dayNight'), type: 'enum', choices: [{ value: 'day', label: t('m.search.day') }, { value: 'night', label: t('m.search.night') }] },
+      ...onOff,
     ]
   }, [countries, sats, present])
   const values: Record<string, FilterValue> = {
     day: g.range ? null : shownDay,
     range: g.range ? { from: g.range[0], to: g.range[1] } : null,
     country: country?.code ?? null,
-    sensors: g.sensors?.join(',') ?? null,
-    sats: g.sats?.join(',') ?? null,
     conf: g.conf ? String(g.conf) : null,
     frp: g.frp ? String(g.frp) : null,
     dn: g.dn === 1 ? 'day' : g.dn === 2 ? 'night' : null,
@@ -371,12 +340,16 @@ export default function GlobePage() {
       p.country = str(next.country)
       p.cam = null
     }
-    if (str(next.sensors) !== values.sensors) p.sensors = (str(next.sensors)?.split(',') as Sensor[] | undefined) ?? null
-    if (str(next.sats) !== values.sats) p.sats = str(next.sats)?.split(',') ?? null
     if (str(next.conf) !== values.conf) p.conf = (Number(str(next.conf)) || 0) as 0 | 1 | 2
     if (str(next.frp) !== values.frp) p.frp = Number(str(next.frp)) || 0
     if (str(next.dn) !== values.dn) p.dn = str(next.dn) === 'day' ? 1 : str(next.dn) === 'night' ? 2 : 0
     if (Object.keys(p).length) patch(p, 'range' in p || 'date' in p || 'country' in p)
+  }
+  const onIds = [...(g.sensors ?? []).map((x) => `sensor:${x}`), ...(g.sats ?? []).map((x) => `sat:${x}`)]
+  const onOffChange = (ids: string[]) => {
+    const sensors = ids.filter((x) => x.startsWith('sensor:')).map((x) => x.slice(7) as Sensor)
+    const picked = ids.filter((x) => x.startsWith('sat:')).map((x) => x.slice(4))
+    patch({ sensors: sensors.length ? sensors : null, sats: picked.length ? picked : null })
   }
   const filtered = Boolean(g.sats || g.sensors || g.conf || g.frp || g.dn || g.country)
 
@@ -422,8 +395,8 @@ export default function GlobePage() {
         <FilterBar
           label={t('m.globe.filters')}
           options={options}
-          value={[]}
-          onChange={() => {}}
+          value={onIds}
+          onChange={onOffChange}
           values={values}
           onValuesChange={onValues}
           pinned={pinned}

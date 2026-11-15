@@ -205,6 +205,7 @@
   "m.compare.meanFw": "Mean: forward",
   "m.compare.meanLoyo": "Mean: held-out year",
   "m.compare.method": "Method",
+  "m.compare.methods": "Methods",
   "m.compare.noiseFloor": "Noise floor about {pct}%: even two identical instruments differ this much month to month, so no method can do better.",
   "m.compare.pick": "Algorithms shown",
   "m.compare.rawSwitch": "Naive splice (raw rows)",

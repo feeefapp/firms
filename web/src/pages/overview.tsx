@@ -16,7 +16,7 @@ import { errorMessage } from '@/lib/errors'
 import { formatNumber, formatPct, formatYm } from '@/lib/format'
 import { useAnalysisParams } from '@/lib/params'
 import { useRemote } from '@/lib/use-remote'
-import { EditPeriodButton, ParamsBar, rangeLabel } from '@/shell/params-bar'
+import { ParamsBar, rangeLabel } from '@/shell/params-bar'
 import { ScreenDock } from '@/shell/screen-slots'
 import { t } from '@/i18n/locale'
 
@@ -68,7 +68,6 @@ export default function OverviewPage() {
             {params.view === 'anomaly' ? ` · ${t('m.overview.anomalyVs', { baseline: baselineLabel })}` : ''}
           </>
         }
-        action={<EditPeriodButton />}
       />
       {params.region?.fire_level === 'low' ? (
         <Notice icon={<AlertTriangle size={18} />}>{t('m.overview.lowFire', { pct: formatNumber(params.region.eval?.[params.algorithm] ?? null, 0) })}</Notice>

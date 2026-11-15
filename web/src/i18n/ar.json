@@ -205,6 +205,7 @@
   "m.compare.meanFw": "المتوسط: للأمام",
   "m.compare.meanLoyo": "المتوسط: إخفاء سنة",
   "m.compare.method": "الطريقة",
+  "m.compare.methods": "الطرق",
   "m.compare.noiseFloor": "حد الضجيج نحو {pct}%: حتى جهازان متطابقان يختلفان بهذا القدر شهرياً، فلا تتوقّع خطأ أقل منه.",
   "m.compare.pick": "الخوارزميات المعروضة",
   "m.compare.rawSwitch": "ربط مباشر (أسطر خام)",

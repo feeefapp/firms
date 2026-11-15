@@ -38,35 +38,12 @@
 .fm-top-slot:empty {
   display: none;
 }
-/* A page bar with parameters takes the room between the navigation and the tools, so its
-   segmented controls unfold whenever they fit. */
-.fm-app-bar > .lab-workspace-app-title:has(.fm-params) {
-  flex: 1 1 auto;
-}
-@container (max-width: 760px) {
-  .fm-app-bar:has(.fm-params) {
-    flex-wrap: wrap;
-  }
-  .fm-app-bar:has(.fm-params) > .lab-workspace-app-title {
-    order: 3;
-    flex: 1 0 100%;
-    overflow: visible;
-  }
-}
 .fm-bar-title {
   padding-inline: 12px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.fm-params {
-  max-width: 100%;
-  min-width: 0;
-}
-.fm-params-region {
-  flex: 0 1 13rem;
-  min-width: 6.5rem;
 }
 
 /* Bottom dock: the assistant and the page's actions in one row. */
@@ -180,39 +157,7 @@
   object-fit: cover;
 }
 
-/* Advanced sheet. */
-.fm-advanced {
-  display: grid;
-  gap: var(--lab-space-5, 24px);
-}
-.fm-alg-label,
-.fm-cmap-label {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.fm-alg-error {
-  font-variant-numeric: tabular-nums;
-  color: var(--lab-ink);
-}
-.fm-ramp {
-  display: inline-block;
-  width: 72px;
-  height: 10px;
-  border-radius: 3px;
-  vertical-align: middle;
-}
-[dir='rtl'] .fm-ramp {
-  transform: scaleX(-1);
-}
 /* The assistant's conversation bubble keeps its size; the parameters fold first. */
 .fm-host .fm-top-slot > .fm-chat-bar {
   flex: none;
-}
-@container (max-width: 760px) {
-  .fm-host .fm-top-slot:has(> .fm-chat-bar) > .fm-params {
-    flex: 1 1 0;
-    min-width: 0;
-  }
 }
