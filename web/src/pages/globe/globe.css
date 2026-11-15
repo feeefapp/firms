@@ -71,26 +71,8 @@
 /* Timeline: inside the filters card header, so it shows at peek too. */
 .fm-tl {
   display: grid;
-  gap: 4px;
-}
-.fm-tl-wait {
-  margin: 0;
-}
-.fm-tl-row {
-  display: flex;
-  align-items: center;
   gap: var(--lab-shell-gap, 8px);
-  min-width: 0;
-}
-.fm-tl-clock {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  color: var(--lab-ink);
+  padding: var(--lab-space-3, 12px) var(--lab-space-4, 16px);
 }
 .fm-tl-hist {
   display: block;
@@ -114,40 +96,35 @@
   color: var(--lab-ink);
   pointer-events: none;
 }
-.fm-filters-head {
-  display: grid;
-  gap: var(--lab-shell-gap, 8px);
-  padding: var(--lab-shell-gap, 8px) var(--lab-space-3, 12px) var(--lab-space-2, 8px);
+/* The sheets' stage: the globe between the floating app bar and the dock, so the card and the
+   inspector never cover them (the kit lays sheets out inside this element). */
+.fm-globe-stage {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(var(--lab-toolbar-item, 44px) + 2 * var(--lab-shell-gap, 8px));
+  bottom: calc(var(--lab-toolbar-item, 44px) + 2 * var(--lab-shell-gap, 8px));
+  z-index: 2;
+  pointer-events: none;
+  container-type: inline-size;
 }
-.fm-filters {
-  padding-block-end: var(--lab-space-4, 16px);
-}
-.fm-filters-count {
-  margin: 0 var(--lab-space-4, 16px);
-}
-.fm-filter-row {
+/* Maps-style search in the card header (it also drags the card). */
+.fm-sheet-search {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--lab-shell-gap, 8px);
-  padding: var(--lab-space-2, 8px) var(--lab-space-3, 12px);
+  width: 100%;
+  min-width: 0;
+  padding-inline: calc(var(--lab-shell-gap, 8px) / 2);
 }
-.fm-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  padding: var(--lab-space-2, 8px) var(--lab-space-3, 12px);
-  font-size: 13px;
+.fm-sheet-search > * {
+  flex: 1;
+  min-width: 0;
 }
-.fm-chip-label small,
-.fm-sat-trail small {
-  color: var(--lab-muted);
+.fm-dock-clock {
+  padding-inline: var(--lab-shell-gap, 8px);
   font-variant-numeric: tabular-nums;
-}
-.fm-sat-trail {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--lab-ink);
 }
 .fm-swatch {
   display: inline-block;
@@ -155,28 +132,4 @@
   block-size: 10px;
   border-radius: 2px;
   flex: none;
-}
-.fm-inspector-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--lab-shell-gap, 8px);
-  padding: var(--lab-shell-gap, 8px) var(--lab-space-3, 12px);
-}
-.fm-inspector-title {
-  font-size: 15px;
-  color: var(--lab-ink);
-}
-.fm-globe-boxnote {
-  position: absolute;
-  top: calc(var(--lab-toolbar-item, 44px) + 3 * var(--lab-shell-gap, 8px));
-  inset-inline-start: var(--lab-shell-gap, 8px);
-  z-index: 2;
-  max-width: 22rem;
-  font-size: 12px;
-}
-.fm-subhead {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--lab-ink);
 }

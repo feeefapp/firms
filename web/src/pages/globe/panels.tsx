@@ -1,5 +1,4 @@
-import { BoxSelect, Clock, Info, Trash2, ZoomIn } from 'lucide-react'
-import { Button } from '@feeef.dev/ui/primitives/button'
+import { Info } from 'lucide-react'
 import { ListRow, ListSection } from '@feeef.dev/ui/primitives/list'
 import { ErrorState, LoadingState, Notice, Table, Td, Th } from '@/components/ui/data'
 import { api } from '@/lib/api'
@@ -13,7 +12,7 @@ const hhmm = (t: number) => new Date(t * 1000).toISOString().slice(11, 16)
 const kelvin = (v: number | null) => (v == null ? '–' : `${v.toFixed(1)} K ≈ ${(v - 273.15).toFixed(0)}°C`)
 
 /** One FIRMS record: what the satellite measured and how it saw the place. */
-export function RecordDetails({ record: r, onZoom, onGoTo }: { record: PickedRecord; onZoom: () => void; onGoTo: () => void }) {
+export function RecordDetails({ record: r }: { record: PickedRecord }) {
   const confWords = [t('m.conf.low'), t('m.conf.nominalOne'), t('m.conf.highOne')]
   const conf = r.sat.conf === 'pct' && r.confRaw >= 0 ? `${r.confRaw}% → ${confWords[r.conf]}` : confWords[r.conf] ?? '–'
   const fact = (title: string, value: string, ltr = true) => <ListRow static title={title} trailing={<span dir={ltr ? 'ltr' : undefined}>{value}</span>} />
@@ -50,16 +49,6 @@ export function RecordDetails({ record: r, onZoom, onGoTo }: { record: PickedRec
           <ListRow static title={t('m.globe.noOthers')} />
         )}
       </ListSection>
-      <div className="fm-actions">
-        <Button variant="tonal" onClick={onZoom}>
-          <ZoomIn aria-hidden />
-          {t('m.globe.zoomIn')}
-        </Button>
-        <Button variant="text" onClick={onGoTo}>
-          <Clock aria-hidden />
-          {t('m.globe.goToTime')}
-        </Button>
-      </div>
     </div>
   )
 }
@@ -74,9 +63,6 @@ export function AreaPanel({
   regions,
   stats,
   sats,
-  onZoom,
-  onRedraw,
-  onClear,
 }: {
   bbox: number[]
   /** The day shown, or null for a range (the conversion is per day). */
@@ -85,29 +71,12 @@ export function AreaPanel({
   /** Records of the loaded data inside the box, with every filter applied. */
   stats: Stats | null
   sats: DaySat[]
-  onZoom: () => void
-  onRedraw: () => void
-  onClear: () => void
 }) {
   return (
     <div className="fm-stack">
       <p className="fm-note">
         <span dir="ltr">{formatBbox(bbox)}</span>
       </p>
-      <div className="fm-actions">
-        <Button variant="tonal" onClick={onZoom}>
-          <ZoomIn aria-hidden />
-          {t('m.globe.zoomTo')}
-        </Button>
-        <Button variant="text" onClick={onRedraw}>
-          <BoxSelect aria-hidden />
-          {t('m.globe.redraw')}
-        </Button>
-        <Button variant="text" onClick={onClear}>
-          <Trash2 aria-hidden />
-          {t('m.globe.clearBox')}
-        </Button>
-      </div>
       {stats ? (
         <ListSection header={t('m.globe.inBox')} footer={t('m.globe.inBoxHint')}>
           <ListRow static title={t('m.globe.visible')} trailing={formatNumber(stats.total)} />

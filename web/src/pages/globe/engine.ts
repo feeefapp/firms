@@ -762,6 +762,39 @@ export class GlobeEngine {
     return { lat: Math.round(lat * 1e3) / 1e3, lon: Math.round(lon * 1e3) / 1e3, altKm: Math.round((this.camera.position.length() - 1) * R_KM) }
   }
   /** Visible records right now (time window and every filter), by system and satellite. */
+  /** The busiest cells (`cellDeg` wide) among visible records, by total FRP: where the fires are. */
+  hotspots(limit = 8, cellDeg = 0.25): { lat: number; lon: number; count: number; frp: number; last: number }[] {
+    const C = this.D.cols
+    const cells = new Map<number, { la: number; lo: number; count: number; frp: number; last: number }>()
+    const W = Math.ceil(360 / cellDeg)
+    for (let i = 0; i < this.count; i++) {
+      if (!this.isVisible(i)) continue
+      const key = Math.floor((C.lat[i] + 90) / cellDeg) * W + Math.floor((C.lon[i] + 180) / cellDeg)
+      let c = cells.get(key)
+      if (!c) cells.set(key, (c = { la: 0, lo: 0, count: 0, frp: 0, last: 0 }))
+      c.la += C.lat[i]
+      c.lo += C.lon[i]
+      c.count++
+      c.frp += C.frp[i] ?? 0
+      c.last = Math.max(c.last, C.t[i])
+    }
+    return [...cells.values()]
+      .sort((a, b) => b.frp - a.frp || b.count - a.count)
+      .slice(0, limit)
+      .map((c) => ({ lat: c.la / c.count, lon: c.lo / c.count, count: c.count, frp: c.frp, last: c.last }))
+  }
+  /** Rows of the loaded data inside a box that pass every filter, as CSV. */
+  csv(bb: number[]): string {
+    const C = this.D.cols
+    const out = ['satellite,latitude,longitude,time_utc,frp_mw,confidence,day_night,scan_km,track_km']
+    for (let i = 0; i < this.count; i++) {
+      if (C.lon[i] < bb[0] || C.lon[i] > bb[2] || C.lat[i] < bb[1] || C.lat[i] > bb[3] || !this.isVisible(i)) continue
+      out.push(
+        [this.D.sats[C.sat[i]].code, C.lat[i], C.lon[i], new Date(C.t[i] * 1000).toISOString(), C.frp[i] ?? '', ['low', 'nominal', 'high'][C.conf[i]] ?? '', C.dn[i] ? 'N' : 'D', this.scan[i].toFixed(2), this.track[i].toFixed(2)].join(','),
+      )
+    }
+    return out.join('\n') + '\n'
+  }
   stats(bb?: number[] | null): Stats {
     const C = this.D.cols
     const out: Stats = { total: 0, bySystem: [0, 0, 0, 0], bySat: this.D.sats.map(() => 0), frp: 0 }
