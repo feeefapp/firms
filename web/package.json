@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@feeef.dev/ui": "github:feeefapp/ui#v0.16.0",
+    "@feeef.dev/ui": "github:feeefapp/ui#v0.16.1",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@radix-ui/react-popover": "^1.1.23",
     "@radix-ui/react-select": "^2.3.7",
