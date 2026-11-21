@@ -1,7 +1,7 @@
 # Firms web
 
 The React front-end of Firms: a harmonized MODIS/VIIRS fire calendar. Vite + React 19 +
-TypeScript + react-router 7 on the Feeef UI kit (`@feeef.dev/ui`, `github:feeefapp/ui#v0.15.3`).
+TypeScript + react-router 7 on the Feeef UI kit (`@feeef.dev/ui`, `github:feeefapp/ui#v0.16.0`).
 No Tailwind, no shadcn. The API contract is `../docs/ARCHITECTURE.md`; the Rust server
 (`../server`) serves the built SPA.
 
