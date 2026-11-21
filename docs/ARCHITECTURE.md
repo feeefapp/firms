@@ -7,7 +7,7 @@ One container: a Rust server (axum 0.8) that serves the React SPA, the JSON API,
 
 ```
 server/        Rust crate `firms-server` (axum 0.8, tokio, tower-http, reqwest rustls, rusqlite bundled, serde)
-web/           Vite + React 19 + TypeScript SPA on @feeef.dev/ui (github:feeefapp/ui#v0.16.1), react-router 7
+web/           Vite + React 19 + TypeScript SPA on @feeef.dev/ui (github:feeefapp/ui#v0.16.2), react-router 7
 tools/         Python harmonization (harmlib.py, harmonize.py, build_harm_data.py) + fetch_data.py (one globe day)
 data/          seed data shipped in the image: regions/*.json, benchmark.json (globe days are built on demand into day/)
 docs/          this file
