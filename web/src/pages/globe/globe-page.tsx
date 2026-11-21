@@ -887,14 +887,20 @@ function Explore({
       {rangeNeedsArea ? <Notice tone="warning">{t('m.globe.rangeNeedsArea')}</Notice> : null}
       {heat.length ? (
         <ListSection header={t('m.look.display')}>
-          <ListRow
-            static
-            leading={<img src={heatIconUrl('industrial')} alt="" width={22} height={22} />}
-            title={t('m.heat.show')}
-            subtitle={t('m.heat.zoomHint')}
-            trailing={<Checkbox aria-label={t('m.heat.show')} checked={heatShown} onCheckedChange={onHeatShown} />}
+          <Checkbox
+            containerClassName="heat-display-choice"
+            label={<span><img src={heatIconUrl('industrial')} alt="" width={22} height={22} /> {t('m.heat.show')}</span>}
+            description={t('m.heat.zoomHint')}
+            checked={heatShown}
+            onCheckedChange={onHeatShown}
           />
-          <ListRow static title={t('m.heat.hide')} subtitle={t('m.heat.hideHint')} trailing={<Checkbox aria-label={t('m.heat.hide')} checked={heatHidden} onCheckedChange={onHeatHidden} />} />
+          <Checkbox
+            containerClassName="heat-display-choice"
+            label={t('m.heat.hide')}
+            description={t('m.heat.hideHint')}
+            checked={heatHidden}
+            onCheckedChange={onHeatHidden}
+          />
         </ListSection>
       ) : null}
       {data?.note ? <Notice tone="info">{data.note}</Notice> : null}

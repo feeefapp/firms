@@ -193,3 +193,10 @@
   border-radius: 2px;
   flex: none;
 }
+
+.heat-display-choice {
+  inline-size: 100%;
+}
+.heat-display-choice img {
+  vertical-align: middle;
+}
